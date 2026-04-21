@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const API_URL = "https://SCRIPT_URL_BURAYA_YAPISTIR";
+const API_URL = "https://script.google.com/macros/s/AKfycbzI4RbRYqWrMLAoAEGYI9QrgDdRDgycXhDchid64w8RIdxkbT8JKoexCso1C3mdl1tY/exec";
 
 const mockProducts = [
   {
