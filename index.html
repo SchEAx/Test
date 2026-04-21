@@ -1,2406 +1,700 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Garage İstanbul</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#09090b" />
-  <link rel="apple-touch-icon" href="/logo.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Garage İstanbul" />
-  <style>
-    body { margin: 0; font-family: Arial, sans-serif; background: #09090b; }
-    canvas { touch-action: none; }
-    input[type="checkbox"] {
-  accent-color: #18181b;
+import { useEffect, useMemo, useState } from "react";
+
+const API_URL = "https://SCRIPT_URL_BURAYA_YAPISTIR";
+
+const mockProducts = [
+  {
+    id: "1",
+    code: "PAS-001",
+    barcode: "",
+    name: "Rizline Paspas",
+    category: "Paspas",
+    subCategory: "Havuzlu",
+    brand: "Renault",
+    model: "Clio 5",
+    vehicleType: "Binek",
+    variant: "Otomatik / Siyah",
+    stock: 12,
+    minStock: 3,
+    shelf: "A-01",
+    note: "",
+    updatedAt: "2026-04-21 10:30",
+  },
+  {
+    id: "2",
+    code: "ONEK-014",
+    barcode: "",
+    name: "Ön Ek",
+    category: "Body Kit",
+    subCategory: "Ön Ek",
+    brand: "Fiat",
+    model: "Egea",
+    vehicleType: "Sedan",
+    variant: "Makyajlı / Siyah",
+    stock: 2,
+    minStock: 3,
+    shelf: "B-02",
+    note: "",
+    updatedAt: "2026-04-21 10:25",
+  },
+  {
+    id: "3",
+    code: "CAMR-008",
+    barcode: "",
+    name: "Cam Rüzgarlığı",
+    category: "Cam Aksesuar",
+    subCategory: "Rüzgarlık",
+    brand: "VW",
+    model: "Caddy",
+    vehicleType: "Ticari",
+    variant: "Kısa Şasi / Füme",
+    stock: 0,
+    minStock: 2,
+    shelf: "C-03",
+    note: "",
+    updatedAt: "2026-04-21 09:58",
+  },
+  {
+    id: "4",
+    code: "BASA-022",
+    barcode: "",
+    name: "Yan Basamak",
+    category: "Basamak",
+    subCategory: "Yan Basamak",
+    brand: "Kia",
+    model: "Sportage",
+    vehicleType: "SUV",
+    variant: "2022+ / Alüminyum",
+    stock: 5,
+    minStock: 2,
+    shelf: "D-01",
+    note: "",
+    updatedAt: "2026-04-21 09:42",
+  },
+];
+
+const mockMovements = [
+  {
+    id: "m1",
+    createdAt: "2026-04-21 10:42",
+    type: "GIRIS",
+    productCode: "PAS-001",
+    productName: "Rizline Paspas",
+    quantity: 6,
+    previousStock: 6,
+    newStock: 12,
+    user: "Enes",
+    note: "Yeni sevkiyat",
+  },
+  {
+    id: "m2",
+    createdAt: "2026-04-21 11:08",
+    type: "CIKIS",
+    productCode: "ONEK-014",
+    productName: "Ön Ek",
+    quantity: 1,
+    previousStock: 3,
+    newStock: 2,
+    user: "Kasiyer 1",
+    note: "Müşteri montajı",
+  },
+  {
+    id: "m3",
+    createdAt: "2026-04-21 11:26",
+    type: "DUZELTME",
+    productCode: "CAMR-008",
+    productName: "Cam Rüzgarlığı",
+    quantity: 2,
+    previousStock: 0,
+    newStock: 2,
+    user: "Depo",
+    note: "Sayım düzeltme",
+  },
+];
+
+const initialForm = {
+  productId: "",
+  type: "GIRIS",
+  quantity: 1,
+  note: "",
+  user: "",
+};
+
+function formatDate(value) {
+  if (!value) return "-";
+  return value.replace("T", " ").slice(0, 16);
 }
-    textarea, input, select { outline: none; }
-    @media print {
-      @page { size: A5 portrait; margin: 8mm; }
-      html, body { background: #fff !important; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-  </style>
-</head>
-<body>
-  <div id="app"></div>
 
-  <script>
-    const SUPABASE_URL = "https://nkdijfmleeylkmxydpwi.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_cKQPpEXC04sbmnAwGm5dtw_lYTkKx8p";
-
-      const STATUS_OPTIONS = [
-      "Beklemede",
-      "Montaj Sürecinde",
-      "Montaj Bitti - Nakit",
-      "Montaj Bitti - Kart"
-      "Montaj Bitti - Havale"
-      "Montaj İptal Oldu",
-      "Garantiye Gitti"
-    ];
-
-    const PAGE_SIZE = 25;
-    let searchTimer = null;
-    let signatureHandlersBound = false;
-
-    function formatDateTime(value) {
-      if (!value) return "-";
-      return new Date(value).toLocaleString("tr-TR");
-    }
-
-    function formatMoney(value) {
-      const num = Number(value || 0);
-      return new Intl.NumberFormat("tr-TR", {
-        style: "currency",
-        currency: "TRY",
-        maximumFractionDigits: 2,
-      }).format(num);
-    }
-
-    function safeParseJson(value, fallback = {}) {
-      try {
-        return value ? JSON.parse(value) : fallback;
-      } catch {
-        return fallback;
-      }
-    }
-
-    function recordTotal(record) {
-      return (record.operations || []).reduce((sum, op) => sum + Number(op.fee || 0), 0);
-    }
-    function grandTotal(records) {
-  return (records || []).reduce((sum, record) => sum + recordTotal(record), 0);
-}
-    function normalizePlate(value) {
-  return String(value || "")
-    .toUpperCase()
-    .replace(/\s+/g, "")
-    .trim();
+function getStatus(product) {
+  if (Number(product.stock) <= 0) return "Tükendi";
+  if (Number(product.stock) <= Number(product.minStock || 0)) return "Kritik";
+  return "Stok Var";
 }
 
-function isToday(value) {
-  if (!value) return false;
-  const d = new Date(value);
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
+function classForStatus(status) {
+  if (status === "Stok Var") return "bg-emerald-500/15 text-emerald-300 border-emerald-500/20";
+  if (status === "Kritik") return "bg-amber-500/15 text-amber-300 border-amber-500/20";
+  return "bg-rose-500/15 text-rose-300 border-rose-500/20";
 }
 
-function todayTotal(records) {
-  return (records || [])
-    .filter((r) => isToday(r.createdAt))
-    .reduce((sum, r) => sum + recordTotal(r), 0);
+function classForMovement(type) {
+  if (type === "GIRIS") return "bg-emerald-500/15 text-emerald-300";
+  if (type === "CIKIS") return "bg-rose-500/15 text-rose-300";
+  return "bg-sky-500/15 text-sky-300";
 }
 
-function todayCount(records) {
-  return (records || []).filter((r) => isToday(r.createdAt)).length;
+async function apiGet(action) {
+  const res = await fetch(`${API_URL}?action=${action}`, { method: "GET" });
+  if (!res.ok) throw new Error(`GET ${action} başarısız`);
+  return res.json();
 }
 
-function plateHistory(plate, currentId = null) {
-  const normalized = normalizePlate(plate);
-  if (!normalized) return [];
-  return (state.records || []).filter((r) => {
-    if (currentId && r.id === currentId) return false;
-    return normalizePlate(r.plaka) === normalized;
+async function apiPost(payload) {
+  const res = await fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(payload),
   });
+  if (!res.ok) throw new Error("POST başarısız");
+  return res.json();
 }
 
-    function emptyForm() {
-  return {
-    customerName: "",
-    phone: "",
-    invoiceAddress: "",
-    brand: "",
-    model: "",
-    type: "",
-    plaka: "",
-    sasiNo: "",
-   operations: [
-  { name: "", fee: "" }
-],
-    status: STATUS_OPTIONS[0],
-    vehicleImage: "",
-    noteText: "",
-    technician: "",
-    vehicleDefects: "",
-    signature: "",
-    kvkkOnay: false,
-    musteriOnay: false,
-  };
-}
+export default function StockTakipUIDemo() {
+  const [products, setProducts] = useState(mockProducts);
+  const [movements, setMovements] = useState(mockMovements);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("TUMU");
+  const [selectedProductId, setSelectedProductId] = useState(mockProducts[0]?.id || "");
+  const [form, setForm] = useState({ ...initialForm, productId: mockProducts[0]?.id || "", user: "Enes" });
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [usingMock, setUsingMock] = useState(true);
+  const [message, setMessage] = useState("Demo veri açık. Apps Script URL girince canlı veriye geçer.");
 
-    const state = {
-      records: [],
-      totalRemoteCount: 0,
-      search: "",
-      searchDraft: "",
-      selectedId: null,
-      tabletMode: false,
-      statusFilter: "Tümü",
-      activeTab: "kayit",
-      loading: false,
-      editId: null,
-      visibleCount: PAGE_SIZE,
-      company: {
-        name: "Garage İstanbul Oto Aksesuar",
-        phone: "0 (554) 537 36 36",
-        email: "garageistanbul.satis@gmail.com",
-        address: "CUMHURİYET MAH. 676 SOK. NO:85 MURATPAŞA / ANTALYA"
-      },
-      form: emptyForm(),
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === selectedProductId) || products[0] || null,
+    [products, selectedProductId]
+  );
+
+  const filteredProducts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return products.filter((product) => {
+      const status = getStatus(product);
+      const matchesSearch = !q || [
+        product.code,
+        product.name,
+        product.category,
+        product.brand,
+        product.model,
+        product.variant,
+        product.shelf,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
+
+      const matchesFilter =
+        filter === "TUMU" ||
+        (filter === "KRITIK" && status === "Kritik") ||
+        (filter === "TUKENDI" && status === "Tükendi") ||
+        product.category === filter;
+
+      return matchesSearch && matchesFilter;
+    });
+  }, [products, search, filter]);
+
+  const stats = useMemo(() => {
+    const totalProduct = products.length;
+    const totalStock = products.reduce((sum, item) => sum + Number(item.stock || 0), 0);
+    const criticalCount = products.filter((item) => getStatus(item) === "Kritik").length;
+    const outOfStockCount = products.filter((item) => getStatus(item) === "Tükendi").length;
+    return [
+      { label: "Toplam Ürün", value: String(totalProduct), note: "Aktif ürün kartı" },
+      { label: "Toplam Stok", value: String(totalStock), note: "Tüm ürünlerin toplamı" },
+      { label: "Kritik Stok", value: String(criticalCount), note: "Min. stok altı" },
+      { label: "Tükendi", value: String(outOfStockCount), note: "Stok 0 olanlar" },
+    ];
+  }, [products]);
+
+  async function loadData() {
+    if (!API_URL || API_URL.includes("SCRIPT_URL_BURAYA_YAPISTIR")) {
+      setUsingMock(true);
+      setProducts(mockProducts);
+      setMovements(mockMovements);
+      setSelectedProductId(mockProducts[0]?.id || "");
+      setForm((prev) => ({ ...prev, productId: mockProducts[0]?.id || "" }));
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const [productRes, movementRes] = await Promise.all([
+        apiGet("listProducts"),
+        apiGet("listMovements"),
+      ]);
+
+      const liveProducts = Array.isArray(productRes?.data) ? productRes.data : [];
+      const liveMovements = Array.isArray(movementRes?.data) ? movementRes.data : [];
+
+      setProducts(liveProducts);
+      setMovements(liveMovements);
+      setSelectedProductId(liveProducts[0]?.id || "");
+      setForm((prev) => ({ ...prev, productId: liveProducts[0]?.id || "" }));
+      setUsingMock(false);
+      setMessage("Canlı veri bağlı. Ürünler ve hareketler Google Sheets’ten geliyor.");
+    } catch (error) {
+      console.error(error);
+      setUsingMock(true);
+      setProducts(mockProducts);
+      setMovements(mockMovements);
+      setMessage("Canlı veride hata oldu. Demo veriyle devam ediliyor.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedProduct && products[0]) {
+      setSelectedProductId(products[0].id);
+    }
+  }, [selectedProduct, products]);
+
+  function handlePickProduct(productId) {
+    setSelectedProductId(productId);
+    setForm((prev) => ({ ...prev, productId }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!form.productId) {
+      setMessage("Önce bir ürün seç knk.");
+      return;
+    }
+    if (!form.quantity || Number(form.quantity) <= 0) {
+      setMessage("Miktar 0’dan büyük olmalı.");
+      return;
+    }
+
+    const product = products.find((item) => item.id === form.productId);
+    if (!product) {
+      setMessage("Ürün bulunamadı.");
+      return;
+    }
+
+    const qty = Number(form.quantity);
+    const prevStock = Number(product.stock || 0);
+    const nextStock =
+      form.type === "GIRIS"
+        ? prevStock + qty
+        : form.type === "CIKIS"
+        ? prevStock - qty
+        : qty;
+
+    if (form.type === "CIKIS" && nextStock < 0) {
+      setMessage("Bu ürün için yeterli stok yok.");
+      return;
+    }
+
+    const optimisticProducts = products.map((item) =>
+      item.id === product.id ? { ...item, stock: nextStock, updatedAt: new Date().toISOString() } : item
+    );
+
+    const optimisticMovement = {
+      id: String(Date.now()),
+      createdAt: new Date().toISOString(),
+      type: form.type,
+      productCode: product.code,
+      productName: product.name,
+      quantity: qty,
+      previousStock: prevStock,
+      newStock: nextStock,
+      user: form.user || "Bilinmiyor",
+      note: form.note || "",
     };
 
-    function apiHeaders(extra = {}) {
-      return {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        ...extra,
-      };
-    }
+    setProducts(optimisticProducts);
+    setMovements((prev) => [optimisticMovement, ...prev].slice(0, 20));
+    setSaving(true);
+    setMessage("İşlem kaydediliyor...");
 
-    function mapDbRow(r) {
-      const meta = safeParseJson(r.notes, {});
-      const operations = Array.isArray(meta.operations)
-  ? meta.operations.map((op) => ({
-      name: op.name || "",
-      fee: op.fee || ""
-    }))
-  : [];
-      return {
-        id: String(r.id),
-        recordNo: r.record_no || "-",
-        createdAt: r.created_at,
-        customerName: r.customer_name || "",
-        phone: r.phone || "",
-        plaka: r.plaka || meta.plaka || "",
-        sasiNo: meta.sasiNo || "",
-        invoiceAddress: meta.invoiceAddress || r.address || "",
-        brand: r.brand || "",
-        model: r.model || "",
-        operations,
-        noteText: meta.noteText || "",
-        technician: meta.technician || "",
-        vehicleDefects: meta.vehicleDefects || "",
-        vehicleImage: meta.vehicleImage || "",
-        signature: meta.signature || r.signature || "",
-        status: r.status || STATUS_OPTIONS[0],
-        kvkkOnay: meta.kvkkOnay || false,
-        musteriOnay: meta.musteriOnay || false,
-      };
-    }
-
-    async function dbFetchRecords({ offset = 0, limit = PAGE_SIZE, search = "", status = "Tümü" } = {}) {
-      const params = new URLSearchParams();
-      params.set("select", "*");
-      params.set("order", "id.desc");
-
-      if (status && status !== "Tümü") {
-        params.set("status", `eq.${status}`);
-      }
-
-      const trimmed = (search || "").trim();
-      if (trimmed) {
-  const safe = trimmed.replace(/,/g, " ").replace(/\*/g, "");
-  params.set(
-    "or",
-    `record_no.ilike.*${safe}*,customer_name.ilike.*${safe}*,phone.ilike.*${safe}*,brand.ilike.*${safe}*,model.ilike.*${safe}*,plaka.ilike.*${safe}*,issue.ilike.*${safe}*,notes.ilike.*${safe}*`
-  );
-}
-
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?${params.toString()}`, {
-        headers: apiHeaders({
-          Range: `${offset}-${offset + limit - 1}`,
-          Prefer: "count=exact"
-        }),
-      });
-
-      if (!res.ok) throw new Error("Kayıtlar alınamadı");
-      const data = await res.json();
-      const rangeHeader = res.headers.get("content-range") || "0-0/0";
-      const totalPart = rangeHeader.split("/")[1] || "0";
-      const total = Number(totalPart) || 0;
-      return { data, total };
-    }
-
-    function formToPayload(form, existingRecordNo = null) {
-  const cleanedOperations = (form.operations || []).filter(
-    op => op.name && op.name.trim() && op.fee !== ""
-  );
-
-  const meta = {
-    invoiceAddress: form.invoiceAddress,
-    operations: cleanedOperations,
-    vehicleImage: form.vehicleImage,
-    noteText: form.noteText,
-    technician: form.technician,
-    vehicleDefects: form.vehicleDefects,
-    signature: form.signature,
-    plaka: form.plaka,
-    sasiNo: form.sasiNo,
-    kvkkOnay: form.kvkkOnay,
-    musteriOnay: form.musteriOnay,
-  };
-
- return {
-  record_no: existingRecordNo || `SRV-${Date.now().toString().slice(-6)}`,
-  customer_name: form.customerName,
-  phone: form.phone,
-  address: form.invoiceAddress || "",
-  device_type: cleanedOperations.map(op => op.name).join(", "),
-  brand: form.brand,
-  model: form.model,
-  plaka: form.plaka || "",
-  issue: cleanedOperations.map(op => op.name).join(", "),
-  notes: JSON.stringify(meta),
-  receiver: "",
-  status: form.status,
-  signature: form.signature || "",
-};
-}
-    async function dbInsertRecord(form) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records`, {
-        method: "POST",
-        headers: apiHeaders({
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        }),
-        body: JSON.stringify(formToPayload(form)),
-      });
-      if (!res.ok) throw new Error("Kayıt eklenemedi");
-      return await res.json();
-    }
-
-    async function dbUpdateRecord(id, form, existingRecordNo) {
-      const payload = formToPayload(form, existingRecordNo);
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${id}`, {
-        method: "PATCH",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          record_no: payload.record_no,
-          customer_name: payload.customer_name,
-          phone: payload.phone,
-          address: payload.address,
-          device_type: (form.operations || []).map(op => op.name).join(", "),
-          brand: payload.brand,
-          model: payload.model,
-         issue: (form.operations || []).map(op => op.name).join(", "),
-          notes: payload.notes,
-          plaka: form.plaka,
-          status: payload.status,
-          signature: payload.signature
-        }),
-      });
-      if (!res.ok) throw new Error("Kayıt güncellenemedi");
-    }
-
-    async function dbUpdateStatus(id, status) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${id}`, {
-        method: "PATCH",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({ status }),
-      });
-      if (!res.ok) throw new Error("Durum güncellenemedi");
-    }
-
-    async function dbUpdateMeta(id, currentRecord, patchMeta) {
-      const existingMeta = {
-        invoiceAddress: currentRecord.invoiceAddress || "",
-        operations: (currentRecord.operations || []).map((op) => op.name),
-        operationFees: Object.fromEntries((currentRecord.operations || []).map((op) => [op.name, op.fee || ""])),
-        vehicleImage: currentRecord.vehicleImage || "",
-        noteText: currentRecord.noteText || "",
-        technician: currentRecord.technician || "",
-        vehicleDefects: currentRecord.vehicleDefects || "",
-        signature: currentRecord.signature || "",
-      };
-
-      const nextMeta = { ...existingMeta, ...patchMeta };
-
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${id}`, {
-        method: "PATCH",
-        headers: apiHeaders({ "Content-Type": "application/json" }),
-        body: JSON.stringify({
-          notes: JSON.stringify(nextMeta),
-          signature: nextMeta.signature || ""
-        }),
-      });
-      if (!res.ok) throw new Error("Kayıt güncellenemedi");
-    }
-
-    async function dbDeleteRecord(id) {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/records?id=eq.${id}`, {
-        method: "DELETE",
-        headers: apiHeaders(),
-      });
-      if (!res.ok) throw new Error("Kayıt silinemedi");
-    }
-
-    async function loadRecordsFromDb() {
-      state.loading = true;
-      render();
-      try {
-        const { data, total } = await dbFetchRecords({
-          offset: 0,
-          limit: state.visibleCount,
-          search: state.search,
-          status: state.statusFilter,
+    try {
+      if (!usingMock) {
+        await apiPost({
+          action: "saveStockMovement",
+          productId: product.id,
+          productCode: product.code,
+          productName: product.name,
+          type: form.type,
+          quantity: qty,
+          previousStock: prevStock,
+          newStock: nextStock,
+          note: form.note,
+          user: form.user,
         });
-        state.records = data.map(mapDbRow);
-        state.totalRemoteCount = total;
-      } finally {
-        state.loading = false;
-        render();
       }
-    }
 
-    function resizeImage(file, maxWidth = 1280, quality = 0.72) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const img = new Image();
-          img.onload = () => {
-            let width = img.width;
-            let height = img.height;
-            if (width > maxWidth) {
-              height = Math.round((height * maxWidth) / width);
-              width = maxWidth;
-            }
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", quality));
-          };
-          img.onerror = reject;
-          img.src = reader.result;
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
+      setForm((prev) => ({ ...prev, quantity: 1, note: "" }));
+      setMessage(usingMock ? "Demo işlem tamam. Apps Script bağlanınca gerçek Sheets’e yazacak." : "Stok işlemi kaydedildi.");
 
-    async function handleVehicleImage(file) {
-      if (!file) return;
-      try {
-        state.form.vehicleImage = await resizeImage(file);
-        render();
-      } catch (e) {
-        console.error(e);
-        alert("Görsel işlenemedi");
+      if (!usingMock) {
+        await loadData();
       }
+    } catch (error) {
+      console.error(error);
+      setMessage("Kayıtta hata oldu. Ağ veya Apps Script tarafını kontrol et.");
+      await loadData();
+    } finally {
+      setSaving(false);
     }
-
-    function updateForm(key, value) {
-      state.form[key] = value;
-    }
-    function addOperationRow() {
-  state.form.operations.push({ name: "", fee: "" });
-  render();
-}
-
-function removeOperationRow(index) {
-  state.form.operations.splice(index, 1);
-  if (!state.form.operations.length) {
-    state.form.operations.push({ name: "", fee: "" });
-  }
-  render();
-}
-
-function updateOperationRow(index, key, value, shouldRender = false) {
-  state.form.operations[index][key] = value;
-
-  const totalBox = document.getElementById("operationTotalBox");
-  if (totalBox) {
-    totalBox.textContent = `Toplam: ${formatMoney(recordTotal(state.form))}`;
   }
 
-  if (shouldRender) {
-    render();
-  }
-} 
+  const categoryOptions = [
+    "TUMU",
+    "KRITIK",
+    "TUKENDI",
+    ...Array.from(new Set(products.map((item) => item.category).filter(Boolean))),
+  ];
 
-    function updateCompany(key, value) {
-      state.company[key] = value;
-    }
-    function selectedRecord() {
-      if (!state.selectedId) return null;
-      return state.records.find((r) => r.id === state.selectedId) || null;
-    }
-
-   function visibleRows() {
-  const q = String(state.search || "").trim().toLowerCase();
-  if (!q) return state.records;
-
-  const normalizedQ = normalizePlate(q);
-
-  return (state.records || []).filter((r) => {
-    const plateMatch = normalizePlate(r.plaka).includes(normalizedQ);
-
-    const textMatch = [
-      r.recordNo,
-      r.customerName,
-      r.phone,
-      r.brand,
-      r.model,
-      r.noteText,
-      r.technician,
-      r.vehicleDefects,
-      r.status,
-      (r.operations || []).map((op) => op.name).join(" ")
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(q);
-
-    return plateMatch || textMatch;
-  });
-}
-
-    function stats() {
-      return {
-        total: state.totalRemoteCount || state.records.length,
-        pending: state.records.filter((r) => r.status === "Beklemede").length,
-        inProgress: state.records.filter((r) => r.status === "Montaj Sürecinde").length,
-        completed: state.records.filter((r) => r.status === "Montaj Bitti").length,
-      };
-    }
-
-    function loadRecordToForm(id) {
-      const record = state.records.find((r) => r.id === id);
-      if (!record) return;
-
-      state.form = {
-  customerName: record.customerName || "",
-  phone: record.phone || "",
-  plaka: record.plaka || "",
-  sasiNo: record.sasiNo || "",
-  invoiceAddress: record.invoiceAddress || "",
-  brand: record.brand || "",
-  model: record.model || "",
-  type: record.type || "",
-  operations: (record.operations || []).length ? record.operations : [{ name: "", fee: "" }],
-  status: record.status || STATUS_OPTIONS[0],
-  vehicleImage: record.vehicleImage || "",
-  noteText: record.noteText || "",
-  technician: record.technician || "",
-  vehicleDefects: record.vehicleDefects || "",
-  signature: record.signature || "",
-  kvkkOnay: record.kvkkOnay || false,
-  musteriOnay: record.musteriOnay || false,
-
-};
-
-      state.editId = id;
-      state.activeTab = "kayit";
-      signatureHandlersBound = false;
-      render();
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-
-async function saveRecord() {
-  const form = state.form;
-
-  const validOperations = (form.operations || []).filter(
-    op => op.name && op.name.trim() && op.fee !== ""
-  );
-
-  if (!form.customerName || !form.phone || !form.brand || !form.model || !validOperations.length) {
-    alert("Zorunlu alanlar: Müşteri Ad-Soyadı, Telefon, Araç Marka, Araç Modeli, En az 1 işlem ve ücret.");
-    return;
-  }
-
-  if (!form.kvkkOnay || !form.musteriOnay) {
-    alert("Lütfen gerekli onay kutularını işaretleyin!");
-    return;
-  }
-
-  const payloadForm = {
-    ...form,
-    operations: validOperations
-  };
-
-  try {
-    await dbInsertRecord(payloadForm);
-    state.form = emptyForm();
-    state.editId = null;
-    state.activeTab = "liste";
-    signatureHandlersBound = false;
-    state.visibleCount = PAGE_SIZE;
-    await loadRecordsFromDb();
-  } catch (e) {
-    alert("Kayıt veritabanına eklenemedi");
-    console.error(e);
-  }
-}
-async function updateCurrentRecord() {
-  if (!state.editId) return;
-
-  const form = state.form;
-
-  const validOperations = (form.operations || []).filter(
-    op => op.name && op.name.trim() && op.fee !== ""
-  );
-
-  if (!form.customerName || !form.phone || !form.brand || !form.model || !validOperations.length) {
-    alert("Zorunlu alanlar: Müşteri Ad-Soyadı, Telefon, Araç Marka, Araç Modeli, En az 1 işlem ve ücret.");
-    return;
-  }
-
-  if (!form.kvkkOnay || !form.musteriOnay) {
-    alert("Lütfen gerekli onay kutularını işaretleyin!");
-    return;
-  }
-
-  const currentRecord = state.records.find((r) => r.id === state.editId);
-  if (!currentRecord) return;
-
-  const payloadForm = {
-    ...form,
-    operations: validOperations
-  };
-
-  try {
-    await dbUpdateRecord(state.editId, payloadForm, currentRecord.recordNo);
-    state.form = emptyForm();
-    state.editId = null;
-    state.activeTab = "liste";
-    signatureHandlersBound = false;
-    await loadRecordsFromDb();
-  } catch (e) {
-    alert("Kayıt güncellenemedi");
-    console.error(e);
-  }
-}
-
-    function cancelEdit() {
-      state.form = emptyForm();
-      state.editId = null;
-      signatureHandlersBound = false;
-      render();
-    }
-
-    async function deleteRecord(id) {
-
-  if (!confirm("Bu kaydı silmek istediğine emin misin?")) return;
-
-  try {
-        await dbDeleteRecord(id);
-        if (state.selectedId === id) state.selectedId = null;
-        if (state.editId === id) {
-          state.editId = null;
-          state.form = emptyForm();
-        }
-        await loadRecordsFromDb();
-      } catch (e) {
-        alert("Kayıt silinemedi");
-        console.error(e);
-      }
-    }
-
-    async function updateRecordStatus(id, status) {
-      try {
-        await dbUpdateStatus(id, status);
-        const local = state.records.find((r) => r.id === id);
-        if (local) local.status = status;
-        render();
-      } catch (e) {
-        alert("Durum güncellenemedi");
-        console.error(e);
-      }
-    }
-
-    async function updateRecordTechnician(id, technician) {
-      const record = state.records.find((r) => r.id === id);
-      if (!record) return;
-      try {
-        await dbUpdateMeta(id, record, { technician });
-        record.technician = technician;
-      } catch (e) {
-        alert("Usta bilgisi güncellenemedi");
-        console.error(e);
-      }
-    }
-
-    function downloadFile(filename, content, type = "application/json") {
-      const blob = new Blob([content], { type });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    }
-
-    function exportJson() {
-      downloadFile("musteri-kayitlari.json", JSON.stringify(state.records, null, 2));
-    }
-
-    function toCsv(rows) {
-      const headers = [
-        "Kayıt No", "Kayıt Tarihi", "Müşteri", "Telefon", "Fatura Adresi", "Araç Marka", "Araç Modeli",
-        "Yapılacak İşlemler", "İşlem Ücretleri", "Toplam Tutar", "Araçta Görülen Kusurlar", "Usta", "Durum", "Ek Notlar"
-      ];
-
-      const escapeCsv = (v) => {
-        const value = String(v ?? "");
-        if (value.includes(",") || value.includes("\n") || value.includes('"')) {
-          return '"' + value.replace(/"/g, '""') + '"';
-        }
-        return value;
-      };
-
-      const lines = rows.map((r) => {
-        const feeText = (r.operations || []).map((op) => `${op.name}: ${op.fee || 0}`).join(" | ");
-        return [
-          r.recordNo,
-          formatDateTime(r.createdAt),
-          r.customerName,
-          r.phone,
-          r.invoiceAddress || "",
-          r.brand,
-          r.model,
-          (r.operations || []).map((op) => op.name).join(", "),
-          feeText,
-          recordTotal(r),
-          r.vehicleDefects || "",
-          r.technician || "",
-          r.status || "",
-          r.noteText || ""
-        ].map(escapeCsv).join(",");
-      });
-
-      return [headers.join(","), ...lines].join("\n");
-    }
-
-    function exportCsv() {
-      downloadFile("musteri-kayitlari.csv", toCsv(state.records), "text/csv;charset=utf-8;");
-    }
-
-   function printReceipt(id) {
-  const record = state.records.find((r) => r.id === id);
-  if (!record) return;
-
-  const operationsHtml = (record.operations || []).map((op) => `
-    <div class="line-row">
-      <span>${op.name || "-"}</span>
-      <strong>${op.fee ? formatMoney(op.fee) : "-"}</strong>
-    </div>
-  `).join("");
-
-  const win = window.open("", "_blank", "width=800,height=1100");
-  if (!win) return;
-
-  win.document.write(`
-    <html>
-      <head>
-        <title>Servis Fişi - ${record.recordNo}</title>
-        <style>
-         @page { size: A5 portrait; margin: 5mm; }
-
-          html, body {
-            margin: 0;
-            padding: 0;
-            background: #fff;
-            color: #111;
-            font-family: Arial, sans-serif;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-
-          body {
-  font-size: 10px;
-  line-height: 1.25;
-}
-
-          .page {
-  padding: 5mm;
-  box-sizing: border-box;
-  width: 100%;
-}
-
-          .box {
-  border: 1px solid #cfcfcf;
-  border-radius: 8px;
-  padding: 6px 7px;
-  margin-bottom: 5px;
-  page-break-inside: avoid;
-}
-
-          h1, h2, h3, p {
-            margin: 0 0 3px 0;
-          }
-
-          h1 {
-  font-size: 14px;
-  line-height: 1.15;
-}
-
-h2 {
-  font-size: 12px;
-  line-height: 1.15;
-}
-
-h3 {
-  font-size: 10.5px;
-  line-height: 1.15;
-}
-
-          .grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-}
-
-          .label {
-  color: #666;
-  font-size: 8px;
-  text-transform: uppercase;
-  margin-bottom: 0;
-}
-
-.value {
-  font-size: 9.5px;
-  font-weight: 600;
-  word-break: break-word;
-  margin-bottom: 2px;
-}
-
-          .line-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 2px 0;
-  border-bottom: 1px dashed #ddd;
-  font-size: 9.5px;
-}
-
-          .vehicle-image {
-  width: 100%;
-  max-height: 72px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 1px solid #ddd;
-}
-
-.sign-image {
-  width: 100%;
-  max-height: 52px;
-  object-fit: contain;
-  border-radius: 6px;
-  border: 1px solid #ddd;
-  background: #fafafa;
-}
-
-         .two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5px;
-}
-
-          .summary {
-  margin-top: 4px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-          .muted {
-            color: #666;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="page">
-          <div class="box">
-            <h1>${state.company.name}</h1>
-            <p>${state.company.phone} · ${state.company.email}</p>
-            <p>${state.company.address}</p>
-          </div>
-
-          <div class="box">
-            <h2>Araç Kabul Fişi</h2>
-            <p><strong>Kayıt No:</strong> ${record.recordNo}</p>
-            <p><strong>Tarih:</strong> ${formatDateTime(record.createdAt)}</p>
-            <p><strong>Durum:</strong> ${record.status}</p>
-            <p><strong>Usta:</strong> ${record.technician || "-"}</p>
-          </div>
-
-          <div class="grid">
-            <div class="box">
-              <h3>Müşteri Bilgileri</h3>
-              <div class="label">Ad Soyad</div>
-              <div class="value">${record.customerName || "-"}</div>
-
-              <div class="label">Telefon</div>
-              <div class="value">${record.phone || "-"}</div>
-
-              <div class="label">Fatura Adresi</div>
-              <div class="value">${record.invoiceAddress || "-"}</div>
+  return (
+    <div className="min-h-screen bg-zinc-950 text-white">
+      <div className="mx-auto grid min-h-screen max-w-7xl grid-cols-1 lg:grid-cols-[270px_1fr]">
+        <aside className="hidden border-r border-white/10 bg-zinc-900/70 p-5 lg:block">
+          <div className="mb-8 flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-lg font-bold text-zinc-900 shadow-lg">
+              GI
             </div>
-
-            <div class="box">
-              <h3>Araç Bilgileri</h3>
-              <div class="label">Araç Plakası</div>
-              <div class="value">${record.plaka || "-"}</div>
-
-              <div class="label">Şasi Numarası</div>
-              <div class="value">${record.sasiNo || "-"}</div>
-
-              <div class="label">Araç Marka</div>
-              <div class="value">${record.brand || "-"}</div>
-
-              <div class="label">Araç Modeli</div>
-              <div class="value">${record.model || "-"}</div>
+            <div>
+              <div className="text-lg font-semibold">Garage İstanbul</div>
+              <div className="text-sm text-zinc-400">Stok Takip</div>
             </div>
           </div>
 
-          <div class="box">
-            <h3>Araçta Görülen Kusurlar</h3>
-            <p>${record.vehicleDefects || "-"}</p>
-          </div>
+          <nav className="space-y-2 text-sm">
+            {[
+              "Ana Sayfa",
+              "Ürünler",
+              "Stok Giriş/Çıkış",
+              "Hareketler",
+              "Raporlar",
+              "Ayarlar",
+            ].map((item, index) => (
+              <button
+                key={item}
+                className={`w-full rounded-2xl px-4 py-3 text-left transition ${
+                  index === 0 ? "bg-white text-zinc-900 shadow" : "bg-white/5 text-zinc-200 hover:bg-white/10"
+                }`}
+              >
+                {item}
+              </button>
+            ))}
+          </nav>
 
-          <div class="two-col">
-            <div class="box">
-              <h3>Yapılacak İşlemler</h3>
-              ${operationsHtml || "<p>-</p>"}
-              <div class="summary">
-                <span>Toplam</span>
-                <span>${formatMoney(recordTotal(record))}</span>
+          <div className="mt-8 rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-800 to-zinc-900 p-4">
+            <div className="text-sm text-zinc-400">Bağlantı Durumu</div>
+            <div className="mt-2 text-2xl font-bold">{usingMock ? "Demo" : "Canlı"}</div>
+            <div className="text-sm text-zinc-300">
+              {usingMock ? "Apps Script URL bekleniyor" : "Sheets senkron aktif"}
+            </div>
+            <button
+              onClick={loadData}
+              className="mt-4 w-full rounded-2xl bg-amber-400 px-4 py-3 font-semibold text-zinc-900 transition hover:scale-[1.01]"
+            >
+              Veriyi Yenile
+            </button>
+          </div>
+        </aside>
+
+        <main className="p-4 sm:p-6">
+          <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="text-sm text-zinc-400">Hoş geldin</div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Stok Kontrol Paneli</h1>
+              <p className="mt-2 text-sm text-zinc-500">{message}</p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Ürün, kod, kategori ara..."
+                className="w-full rounded-2xl border border-white/10 bg-zinc-900 px-4 py-3 text-sm outline-none placeholder:text-zinc-500 sm:w-80"
+              />
+              <button
+                onClick={loadData}
+                className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-zinc-900 shadow transition hover:scale-[1.01]"
+              >
+                {loading ? "Yükleniyor..." : "Yenile"}
+              </button>
+            </div>
+          </header>
+
+          <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {stats.map((item) => (
+              <div key={item.label} className="rounded-3xl border border-white/10 bg-zinc-900/80 p-4 shadow-xl shadow-black/20">
+                <div className="text-sm text-zinc-400">{item.label}</div>
+                <div className="mt-2 text-2xl font-bold sm:text-3xl">{item.value}</div>
+                <div className="mt-1 text-xs text-zinc-500">{item.note}</div>
               </div>
-            </div>
+            ))}
+          </section>
 
-            <div class="box">
-              <h3>Araç Görseli</h3>
-              ${record.vehicleImage ? `<img src="${record.vehicleImage}" class="vehicle-image" />` : `<p class="muted">Görsel eklenmedi.</p>`}
-
-              <div style="margin-top:7px;">
-                <h3 style="margin-bottom:5px;">İmza</h3>
-                ${record.signature ? `<img src="${record.signature}" class="sign-image" />` : `<p class="muted">İmza alınmadı.</p>`}
-              </div>
-            </div>
-          </div>
-
-          <div class="box">
-            <h3>Ek Notlar</h3>
-            <p>${record.noteText || "-"}</p>
-          </div>
-        </div>
-      </body>
-    </html>
-  `);
-
-  win.document.close();
-  setTimeout(() => {
-    win.focus();
-    win.print();
-  }, 300);
-}
-    function render() {
-      const app = document.getElementById("app");
-      const s = stats();
-       const rows = visibleRows();
-      const selected = selectedRecord();
-      const showModal = !!state.selectedId && !!selected;
-      const grand = grandTotal(rows);
-      const todayGrand = todayTotal(rows);
-      const todayRecordsCount = todayCount(rows);
-      const totalCount = state.totalRemoteCount;
-      const canShowMore = state.records.length < state.totalRemoteCount;
-      const selectedPlateHistory = selected ? plateHistory(selected.plaka, selected.id) : [];
-      const uniqueCustomers = new Set(rows.map((r) => (r.customerName || "").trim()).filter(Boolean)).size;
-      const uniquePlates = new Set(rows.map((r) => normalizePlate(r.plaka)).filter(Boolean)).size;
-
-      const tabs = state.tabletMode
-        ? [{ key: "kayit", label: "Yeni Kayıt" }, { key: "liste", label: "Kayıtlar" }]
-        : [{ key: "kayit", label: "Yeni Kayıt" }, { key: "liste", label: "Kayıtlar" }, { key: "kurulum", label: "Sonraki Adım" }];
-
-      const statCards = [
-        { label: "Toplam Kayıt", value: s.total, icon: "📄" },
-        { label: "Beklemede", value: s.pending, icon: "⏳" },
-        { label: "Montajda", value: s.inProgress, icon: "🔧" },
-        { label: "Montaj Bitti", value: s.completed, icon: "✅" },
-      ];
-
-      app.innerHTML = `
-        <div class="min-h-screen bg-zinc-950 text-white">
-          <div class="z-50 overflow-hidden border-b border-white/10 bg-black/60 backdrop-blur-xl">
-            <div class="pointer-events-none absolute inset-0 overflow-hidden">
-              <div class="absolute -left-20 top-0 h-40 w-40 rounded-full bg-red-500/20 blur-3xl animate-pulse"></div>
-              <div class="absolute right-0 top-4 h-32 w-32 rounded-full bg-white/10 blur-3xl animate-pulse"></div>
-              <div class="absolute left-1/2 top-0 h-24 w-[60%] -translate-x-1/2 bg-gradient-to-r from-transparent via-red-500/20 to-transparent blur-2xl"></div>
-              <div class="absolute bottom-0 left-0 h-px w-full bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
-            </div>
-            <div class="relative max-w-7xl mx-auto px-4 py-4 md:px-6 md:py-5">
-              <div class="flex flex-col items-center justify-center text-center">
-                <div class="relative">
-                  <div class="absolute inset-0 rounded-full bg-red-500/20 blur-2xl scale-110"></div>
-                  <img src="/logo.png" class="relative w-full max-w-[360px] md:max-w-[430px] object-contain drop-shadow-[0_12px_30px_rgba(255,0,0,0.35)] transition duration-500 hover:scale-[1.03]" alt="Garage İstanbul Logo" />
+          <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1.4fr_0.9fr]">
+            <div className="rounded-[28px] border border-white/10 bg-zinc-900/80 p-4 sm:p-5">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">Ürün Listesi</h2>
+                  <p className="text-sm text-zinc-400">Kategori, stok ve raf bilgisiyle hızlı görünüm</p>
                 </div>
-                <div class="mt-2 space-y-1">
-                  <p class="text-xs md:text-sm tracking-[0.25em] text-zinc-300 uppercase">Araç Kabul & Servis Yönetim Sistemi</p>
-                  <div class="mx-auto h-px w-40 bg-gradient-to-r from-transparent via-red-400/70 to-transparent"></div>
+                <div className="flex flex-wrap gap-2">
+                  {categoryOptions.map((chip, i) => (
+                    <button
+                      key={chip}
+                      onClick={() => setFilter(chip)}
+                      className={`rounded-full px-3 py-2 text-xs font-medium ${
+                        filter === chip || (i === 0 && filter === "TUMU")
+                          ? "bg-white text-zinc-900"
+                          : "bg-white/5 text-zinc-300"
+                      }`}
+                    >
+                      {chip === "TUMU" ? "Tümü" : chip === "KRITIK" ? "Kritik" : chip === "TUKENDI" ? "Tükendi" : chip}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div class="${state.tabletMode ? "max-w-5xl" : "max-w-7xl"} mx-auto p-4 md:p-8">
-            <div class="mb-8 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
-              <div class="rounded-3xl border border-white/10 bg-gradient-to-br from-zinc-900 via-black to-zinc-950 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex items-center gap-3">
-                    <div class="rounded-2xl border border-white/10 bg-white/5 p-3">🚗</div>
+              <div className="space-y-3">
+                {filteredProducts.map((product) => {
+                  const status = getStatus(product);
+                  return (
+                    <div
+                      key={product.id}
+                      className={`rounded-3xl border p-4 transition ${
+                        selectedProductId === product.id
+                          ? "border-white/30 bg-zinc-900"
+                          : "border-white/10 bg-zinc-950/70 hover:border-white/20"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-base font-semibold">{product.name}</h3>
+                            <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-zinc-300">{product.code}</span>
+                            <span className={`rounded-full border px-2.5 py-1 text-[11px] ${classForStatus(status)}`}>{status}</span>
+                          </div>
+                          <div className="mt-2 text-sm text-zinc-400">
+                            {product.category} • {product.brand} {product.model}
+                          </div>
+                          <div className="mt-1 text-sm text-zinc-500">{product.variant}</div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3 text-center sm:min-w-[260px]">
+                          <div className="rounded-2xl bg-white/5 p-3">
+                            <div className="text-xs text-zinc-500">Stok</div>
+                            <div className="mt-1 text-lg font-bold">{product.stock}</div>
+                          </div>
+                          <div className="rounded-2xl bg-white/5 p-3">
+                            <div className="text-xs text-zinc-500">Min.</div>
+                            <div className="mt-1 text-lg font-bold">{product.minStock}</div>
+                          </div>
+                          <div className="rounded-2xl bg-white/5 p-3">
+                            <div className="text-xs text-zinc-500">Raf</div>
+                            <div className="mt-1 text-lg font-bold">{product.shelf || "-"}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handlePickProduct(product.id)}
+                          className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-zinc-900"
+                        >
+                          Seç
+                        </button>
+                        <button
+                          onClick={() => {
+                            handlePickProduct(product.id);
+                            setForm((prev) => ({ ...prev, productId: product.id, type: "GIRIS" }));
+                          }}
+                          className="rounded-2xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-900"
+                        >
+                          + Giriş
+                        </button>
+                        <button
+                          onClick={() => {
+                            handlePickProduct(product.id);
+                            setForm((prev) => ({ ...prev, productId: product.id, type: "CIKIS" }));
+                          }}
+                          className="rounded-2xl bg-rose-400 px-4 py-2 text-sm font-semibold text-zinc-900"
+                        >
+                          - Çıkış
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <form onSubmit={handleSubmit} className="rounded-[28px] border border-white/10 bg-zinc-900/80 p-4 sm:p-5">
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold">Hızlı Stok İşlemi</h2>
+                  <p className="text-sm text-zinc-400">Mobilde 3 adımda giriş/çıkış yap</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs text-zinc-500">Ürün</label>
+                    <select
+                      value={form.productId}
+                      onChange={(e) => {
+                        setForm((prev) => ({ ...prev, productId: e.target.value }));
+                        setSelectedProductId(e.target.value);
+                      }}
+                      className="w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm"
+                    >
+                      {products.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.code} - {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {selectedProduct && (
+                    <div className="rounded-2xl bg-zinc-950/80 p-3 text-sm text-zinc-300">
+                      <div className="font-medium text-white">{selectedProduct.name}</div>
+                      <div className="mt-1 text-zinc-400">
+                        {selectedProduct.brand} {selectedProduct.model} • Raf: {selectedProduct.shelf || "-"}
+                      </div>
+                      <div className="mt-1 text-zinc-400">Mevcut stok: {selectedProduct.stock}</div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { key: "GIRIS", label: "Giriş", className: "bg-emerald-400 text-zinc-900" },
+                      { key: "CIKIS", label: "Çıkış", className: "bg-rose-400 text-zinc-900" },
+                      { key: "DUZELTME", label: "Düzeltme", className: "bg-sky-400 text-zinc-900" },
+                    ].map((btn) => (
+                      <button
+                        key={btn.key}
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, type: btn.key }))}
+                        className={`rounded-2xl px-4 py-3 font-semibold ${
+                          form.type === btn.key ? btn.className : "bg-white/5 text-zinc-300"
+                        }`}
+                      >
+                        {btn.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <h1 class="text-2xl font-bold tracking-tight">${state.company.name}</h1>
-                      <p class="text-sm text-zinc-400">Araç kabul sistemi · pro arama sürümü</p>
+                      <label className="mb-1 block text-xs text-zinc-500">Miktar</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={form.quantity}
+                        onChange={(e) => setForm((prev) => ({ ...prev, quantity: e.target.value }))}
+                        className="w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">İşlemi Yapan</label>
+                      <input
+                        value={form.user}
+                        onChange={(e) => setForm((prev) => ({ ...prev, user: e.target.value }))}
+                        className="w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm"
+                        placeholder="Enes"
+                      />
                     </div>
                   </div>
-                  <button id="toggleTablet" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition bg-zinc-800 text-white hover:bg-zinc-700">
-                    ${state.tabletMode ? "🖥️ Panel Modu" : "📱 Tablet Modu"}
+
+                  <div>
+                    <label className="mb-1 block text-xs text-zinc-500">Açıklama</label>
+                    <textarea
+                      value={form.note}
+                      onChange={(e) => setForm((prev) => ({ ...prev, note: e.target.value }))}
+                      className="min-h-[100px] w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm"
+                      placeholder="Toplu giriş - yeni sevkiyat"
+                    />
+                  </div>
+
+                  <button
+                    disabled={saving}
+                    className="w-full rounded-2xl bg-white px-4 py-3 font-semibold text-zinc-900 shadow transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? "Kaydediliyor..." : "İşlemi Kaydet"}
                   </button>
                 </div>
-                <div class="mt-6 flex flex-wrap gap-2">
-                  <span class="inline-flex rounded-xl bg-white/10 px-3 py-1 text-xs text-white">Supabase Arama</span>
-                  <span class="inline-flex rounded-xl bg-white/10 px-3 py-1 text-xs text-white">Optimize Görsel</span>
-                  <span class="inline-flex rounded-xl bg-white/10 px-3 py-1 text-xs text-white">Kaydı Güncelle</span>
-                  <span class="inline-flex rounded-xl bg-white/10 px-3 py-1 text-xs text-white">Hızlı Liste</span>
-                </div>
-              </div>
+              </form>
 
-              <div class="grid grid-cols-2 gap-4">
-                ${statCards.map((item) => `
-                  <div class="rounded-3xl border border-white/10 bg-zinc-900/80 text-white">
-                    <div class="p-5">
-                      <div class="mb-3 flex items-center justify-between">
-                        <span>${item.icon}</span>
-                        <span class="text-xs text-zinc-500">Canlı</span>
-                      </div>
-                      <div class="text-2xl font-bold">${item.value}</div>
-                      <div class="text-sm text-zinc-400">${item.label}</div>
-                    </div>
+              <div className="rounded-[28px] border border-white/10 bg-zinc-900/80 p-4 sm:p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold">Son Hareketler</h2>
+                    <p className="text-sm text-zinc-400">Canlı stok akışı</p>
                   </div>
-                `).join("")}
+                </div>
+
+                <div className="space-y-3">
+                  {movements.slice(0, 8).map((move) => (
+                    <div key={move.id} className="flex items-center gap-3 rounded-2xl bg-zinc-950/80 p-3">
+                      <div className={`rounded-2xl px-3 py-2 text-xs font-semibold ${classForMovement(move.type)}`}>
+                        {move.type === "GIRIS" ? "Giriş" : move.type === "CIKIS" ? "Çıkış" : "Düzeltme"}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{move.productName}</div>
+                        <div className="text-xs text-zinc-500">
+                          {formatDate(move.createdAt)} • {move.user}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold">
+                          {move.type === "CIKIS" ? "-" : "+"}
+                          {move.quantity}
+                        </div>
+                        <div className="text-[11px] text-zinc-500">{move.previousStock} → {move.newStock}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
+          </section>
 
-            ${state.loading ? `<div class="mb-4 rounded-2xl border border-white/10 bg-zinc-900/90 p-4 text-sm text-zinc-300">Veriler yükleniyor...</div>` : ""}
-
-            ${!state.tabletMode ? `
-              <div class="mb-4 rounded-3xl border border-white/10 bg-zinc-900/90 text-white">
-                <div class="p-6 pb-3"><h2 class="text-lg font-semibold">Firma Bilgileri</h2></div>
-                <div class="grid gap-4 p-6 pt-0 md:grid-cols-2 xl:grid-cols-4">
-                  <input data-company="name" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" value="${state.company.name}" />
-                  <input data-company="phone" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" value="${state.company.phone}" />
-                  <input data-company="email" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" value="${state.company.email}" />
-                  <input data-company="address" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" value="${state.company.address}" />
-                </div>
+          <div className="mt-6 grid grid-cols-1 gap-3 lg:hidden">
+            <div className="rounded-3xl border border-white/10 bg-zinc-900/90 p-3">
+              <div className="grid grid-cols-4 gap-2 text-center text-xs">
+                {['Ana Sayfa', 'Ürünler', 'İşlem', 'Hareket'].map((item, i) => (
+                  <button
+                    key={item}
+                    className={`rounded-2xl px-2 py-3 ${i === 0 ? 'bg-white text-zinc-900 font-semibold' : 'bg-white/5 text-zinc-300'}`}
+                  >
+                    {item}
+                  </button>
+                ))}
               </div>
-            ` : ""}
-
-            <div class="mb-4 grid w-full gap-2 rounded-2xl bg-zinc-900 p-1" style="grid-template-columns: repeat(${tabs.length}, minmax(0, 1fr));">
-              ${tabs.map((tab) => `
-                <button data-tab="${tab.key}" class="rounded-2xl px-4 py-2 text-sm font-medium transition ${state.activeTab === tab.key ? "bg-white text-black" : "text-white hover:bg-white/5"}">${tab.label}</button>
-              `).join("")}
             </div>
-
-            ${state.activeTab === "kayit" ? `
-              <div class="grid gap-4 xl:grid-cols-[1.4fr_0.6fr]">
-                <div class="w-full rounded-3xl border border-white/10 bg-zinc-900/90 text-white">
-                  <div class="flex items-center justify-between p-6 pb-3">
-                    <h2 class="text-lg font-semibold">${state.editId ? "Kayıt Düzenleme" : "Araç Kabul Formu"}</h2>
-                    ${state.editId ? `<span class="rounded-xl bg-amber-500/15 px-3 py-1 text-xs text-amber-300">Düzenleme Modu</span>` : ""}
-                  </div>
-                  <div class="grid gap-4 p-6 pt-0 md:grid-cols-2">
-                    <div class="space-y-2">
-                      <label class="text-sm text-zinc-300">Müşteri Ad Soyadı *</label>
-                      <input data-form="customerName" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" value="${state.form.customerName}" />
-                    </div>
-                    <div class="space-y-2">
-                      <label class="text-sm text-zinc-300">Telefon *</label>
-                      <input data-form="phone" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" value="${state.form.phone}" />
-                    </div>
-                    <div class="space-y-2">
-                      <label class="text-sm text-zinc-300">Araç Plakası</label>
-                      <input
-                        data-form="plaka"
-                        class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white"
-                        placeholder="34 ABC 123"
-                        value="${state.form.plaka || ""}"
-                      />
-                    </div>
-                    
-                    <div class="space-y-2">
-                      <label class="text-sm text-zinc-300">Şasi Numarası</label>
-                      <input
-                        data-form="sasiNo"
-                        maxlength="17"
-                        class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white"
-                        placeholder="VF1XXXXXXXXXXXXXX"
-                        value="${state.form.sasiNo || ""}"
-                      />
-                    </div>
-                     <div class="space-y-2">
-                      <label class="text-sm text-zinc-300">Araç Marka *</label>
-                      <select id="brandSelect" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white">
-                        <option value="">Marka Seç</option>
-                        ${Object.keys(aracVerileri)
-                          .sort((a, b) => a.localeCompare(b, "tr"))
-                          .map((marka) => `
-                            <option value="${marka}" ${state.form.brand === marka ? "selected" : ""}>${marka}</option>
-                          `).join("")}
-                      </select>
-                    </div>
-                    
-                    <div class="space-y-2">
-                      <label class="text-sm text-zinc-300">Araç Modeli *</label>
-                      <select id="modelSelect" ${!state.form.brand ? "disabled" : ""} class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white ${!state.form.brand ? "opacity-60" : ""}">
-                        <option value="">${state.form.brand ? "Model Seç" : "Önce Marka Seç"}</option>
-                        ${state.form.brand
-                          ? Object.keys(aracVerileri[state.form.brand] || {})
-                              .sort((a, b) => a.localeCompare(b, "tr"))
-                              .map((model) => `
-                                <option value="${model}" ${state.form.model === model ? "selected" : ""}>${model}</option>
-                              `).join("")
-                          : ""}
-                      </select>
-                    </div>
-                    
-                    <div class="space-y-2">
-                      <label class="text-sm text-zinc-300">Model Tipi</label>
-                      <select id="typeSelect" ${!state.form.brand || !state.form.model ? "disabled" : ""} class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white ${!state.form.brand || !state.form.model ? "opacity-60" : ""}">
-                        <option value="">${state.form.model ? "Tip Seç" : "Önce Model Seç"}</option>
-                        ${(state.form.brand && state.form.model)
-                          ? (aracVerileri[state.form.brand]?.[state.form.model] || []).map((tip) => `
-                              <option value="${tip}" ${state.form.type === tip ? "selected" : ""}>${tip}</option>
-                            `).join("")
-                          : ""}
-                      </select>
-                    </div>
-                    
-                      <div class="space-y-2">
-                        <label class="text-sm text-zinc-300">Model Yılı</label>
-                        <input
-                          id="yearInput"
-                          type="text"
-                          inputmode="numeric"
-                          placeholder="2020"
-                          maxlength="4"
-                          oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,4)"
-                          class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white"
-                        />
-                      </div>
-                    </div>
-                   <div class="space-y-2 md:col-span-2">
-                    <label class="text-sm text-zinc-300">Yapılacak İşlemler *</label>
-                    <div class="space-y-3 rounded-2xl border border-white/10 bg-zinc-950 p-4">
-                      ${(state.form.operations || []).map((op, index) => `
-                        <div class="grid gap-3 md:grid-cols-[1fr_180px_70px]">
-                          <input
-                            type="text"
-                            placeholder="İşlem adı"
-                            value="${op.name || ""}"
-                            data-op-name="${index}"
-                            class="w-full rounded-2xl border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-white"
-                          />
-                  
-                          <div class="flex items-center rounded-2xl border border-white/10 bg-zinc-900 px-3 py-2">
-                            <span class="mr-2 text-sm text-zinc-400">₺</span>
-                            <input
-                              type="number"
-                              placeholder="0"
-                              value="${op.fee || ""}"
-                              data-op-fee="${index}"
-                              class="w-full bg-transparent text-sm text-white outline-none"
-                            />
-                          </div>
-                  
-                          <button
-                            type="button"
-                            data-op-remove="${index}"
-                            class="rounded-2xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300 hover:bg-red-500/20"
-                          >
-                            Sil
-                          </button>
-                        </div>
-                      `).join("")}
-                  
-                      <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
-                        <button
-                          type="button"
-                          id="addOperationRow"
-                          class="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10"
-                        >
-                          + Satır Ekle
-                        </button>
-                  
-                        <div id="operationTotalBox" class="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300">
-  Toplam: ${formatMoney(recordTotal(state.form))}
-</div>
-                      </div>
-                    </div>
-                  </div>
-
-                    <div class="space-y-2 md:col-span-2">
-                      <label class="text-sm text-zinc-300">Araçta Görülen Kusurlar</label>
-                      <textarea data-form="vehicleDefects" class="min-h-[110px] w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" placeholder="Örn: Sağ ön çamurlukta çizik, arka tamponda çatlak, sol far çevresinde açıklık...">${state.form.vehicleDefects || ""}</textarea>
-                    </div>
-
-                    <div class="space-y-2 md:col-span-2">
-                      <div class="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-zinc-300">
-                        <p><strong class="text-white">Müşteri Onayı:</strong> Aracımı yukarıda belirtilen fiziksel durumda ve belirtilen aksesuarların montajı yapılmak üzere, anlaşılan ürün ve fiyatı da kabul ederek işletmenize teslim ettim. Montaj süresince doğabilecek (işletme kusuru dışındaki) teknik riskler hakkında bilgilendirildim, yapılacak işlemlerden doğan yasal yükümlülükleri kabul ediyorum.</p>
-                        <p class="mt-3"><strong class="text-white">İşletme Onayı:</strong> Araç, yukarıdaki kriterlere göre uygun olarak teslim alınmıştır.</p>
-                        <p class="mt-4 text-xs font-semibold tracking-wide text-zinc-200">KİŞİSEL VERİLERİN İŞLENMESİNE İLİŞKİN AÇIK RIZA BEYAN FORMU</p>
-                        <p class="mt-2 text-xs leading-5 text-zinc-400">Tarafıma sunulan Aydınlatma Metni kapsamında; ad-soyad, telefon, araç plaka ve şasi numarası gibi kişisel verilerimin, işletmeniz tarafından hizmet sunumu, kampanya bildirimleri (SMS/E-posta) ve tanıtım amacıyla Instagram gibi sosyal medya mecralarında (plaka görseli dâhil) işlenmesine, paylaşılmasına ve bu verilerin WhatsApp, iCloud, Google Drive gibi sunucuları yurt dışında bulunan sistemler aracılığıyla aktarılmasına; ayrıca güvenliğim ve hizmet kalitesi amacıyla ses kaydı alınmasına hiçbir baskı altında kalmadan özgür irademle onay veriyorum.</p>
-                      </div>
-                      <div class="mt-4 space-y-3 rounded-2xl border border-white/10 bg-zinc-950/60 p-4">
-  <label class="flex items-start gap-3 text-sm text-zinc-300">
-    <input type="checkbox" data-form="musteriOnay" class="mt-1 h-5 w-5 rounded border border-white/50 bg-zinc-800 accent-white" ${state.form.musteriOnay ? "checked" : ""} />
-    <span>Müşteri onay metnini okudum ve kabul ediyorum.</span>
-  </label>
-  
-  <label class="flex items-start gap-3 text-sm text-zinc-300">
-    <input type="checkbox" data-form="kvkkOnay" class="mt-1 h-5 w-5 rounded border border-white/50 bg-zinc-800 accent-white" ${state.form.kvkkOnay ? "checked" : ""} />
-    <span>Kişisel verilerin işlenmesine ilişkin açık rıza metnini okudum ve kabul ediyorum.</span>
-  </label>
-</div>
-                      <label class="text-sm text-zinc-300">Müşteri İmzası</label>
-                      <div class="rounded-2xl border border-white/10 bg-zinc-950 p-3">
-                        <canvas id="signaturePad" class="block w-full h-[180px] rounded-xl bg-black/30"></canvas>
-                        <div class="mt-3 flex justify-end">
-                          <button id="clearSignature" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition bg-zinc-800 text-white hover:bg-zinc-700">İmzayı Temizle</button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="space-y-2 md:col-span-2">
-                      <label class="text-sm text-zinc-300">Ek Notlar</label>
-                      <textarea data-form="noteText" class="min-h-[90px] w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white">${state.form.noteText || ""}</textarea>
-                    </div>
-
-                    <div class="space-y-2 md:col-span-2">
-                      <label class="text-sm text-zinc-300">Durum</label>
-                      <select data-form="status" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white">
-                        ${STATUS_OPTIONS.map((status) => `<option value="${status}" ${state.form.status === status ? "selected" : ""}>${status}</option>`).join("")}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="space-y-4">
-                  <div class="rounded-3xl border border-white/10 bg-zinc-900/90 text-white">
-                    <div class="p-6 pb-3"><h2 class="text-lg font-semibold">Araç Görseli</h2></div>
-                    <div class="p-6 pt-0 space-y-4">
-                      <label class="flex cursor-pointer items-center justify-center gap-3 rounded-2xl border border-dashed border-white/15 bg-black/20 px-4 py-5 text-sm text-zinc-300 hover:bg-white/5">
-                        <span class="text-lg">📷</span>
-                        <span>Fotoğraf Ekle / Kamerayı Aç</span>
-                        <input id="vehicleImageInput" type="file" accept="image/*" capture="environment" class="hidden" />
-                      </label>
-                      ${state.form.vehicleImage ? `
-                        <div class="overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-2">
-                          <img src="${state.form.vehicleImage}" class="h-56 w-full rounded-xl object-cover" />
-                        </div>
-                        <button id="removeVehicleImage" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition bg-zinc-800 text-white hover:bg-zinc-700">Görseli Sil</button>
-                      ` : `<div class="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm text-zinc-500">Henüz görsel eklenmedi.</div>`}
-                    </div>
-                  </div>
-
-                  <div class="rounded-3xl border border-white/10 bg-zinc-900/90 text-white">
-                    <div class="p-6 pb-3"><h2 class="text-lg font-semibold">Hızlı İşlemler</h2></div>
-                    <div class="grid gap-3 p-6 pt-0 sm:grid-cols-2">
-                      ${state.editId ? `
-                        <button id="updateRecord" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition bg-amber-400 text-black hover:bg-amber-300">✏️ Kaydı Güncelle</button>
-                        <button id="cancelEdit" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition border border-white/10 bg-transparent text-white hover:bg-white/5">İptal</button>
-                      ` : `
-                        <button id="saveRecord" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition bg-white text-black hover:bg-zinc-200">💾 Kaydı Oluştur</button>
-                        <button id="exportCsv" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition bg-zinc-800 text-white hover:bg-zinc-700">⬇️ CSV İndir</button>
-                      `}
-                      <button id="exportJson" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition bg-zinc-800 text-white hover:bg-zinc-700">⬇️ JSON İndir</button>
-                      <button id="resetForm" class="inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium transition border border-white/10 bg-transparent text-white hover:bg-white/5">Formu Sıfırla</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ` : ""}
-
-          ${state.activeTab === "liste" ? `
-  <div class="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-    <div class="rounded-3xl border border-emerald-400/20 bg-emerald-500/10 p-5">
-      <div class="text-sm text-emerald-200">Gösterilen Kayıtlar Toplamı</div>
-      <div class="text-2xl font-bold text-emerald-300">${formatMoney(grand)}</div>
-      <div class="mt-1 text-xs text-emerald-100">${rows.length} kayıt ekranda</div>
-    </div>
-
-    <div class="rounded-3xl border border-sky-400/20 bg-sky-500/10 p-5">
-      <div class="text-sm text-sky-200">Bugünkü Toplam</div>
-      <div class="text-2xl font-bold text-sky-300">${formatMoney(todayGrand)}</div>
-      <div class="mt-1 text-xs text-sky-100">Bugün açılan kayıt: ${todayRecordsCount}</div>
-    </div>
-
-    <div class="rounded-3xl border border-amber-400/20 bg-amber-500/10 p-5">
-      <div class="text-sm text-amber-200">Tekil Müşteri</div>
-      <div class="text-2xl font-bold text-amber-300">${uniqueCustomers}</div>
-      <div class="mt-1 text-xs text-amber-100">Gösterilen kayıtlar içinde</div>
-    </div>
-
-    <div class="rounded-3xl border border-fuchsia-400/20 bg-fuchsia-500/10 p-5">
-      <div class="text-sm text-fuchsia-200">Tekil Plaka</div>
-      <div class="text-2xl font-bold text-fuchsia-300">${uniquePlates}</div>
-      <div class="mt-1 text-xs text-fuchsia-100">${totalCount} kayıt bulundu</div>
-    </div>
-  </div>
-
-              <div class="rounded-3xl border border-white/10 bg-zinc-900/90 text-white">
-                <div class="p-6 pb-3">
-                  <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <h2 class="text-lg font-semibold">Kayıt Listesi</h2>
-                    <div class="flex w-full flex-col gap-3 md:max-w-2xl md:flex-row">
-                     <input id="search" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" placeholder="Kayıt no, plaka, müşteri, telefon, araç, işlem..." value="${state.searchDraft}" />
-                      <select id="statusFilter" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white">
-                        <option value="Tümü" ${state.statusFilter === "Tümü" ? "selected" : ""}>Tümü</option>
-                        ${STATUS_OPTIONS.map((status) => `<option value="${status}" ${state.statusFilter === status ? "selected" : ""}>${status}</option>`).join("")}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="grid gap-3 p-6 pt-0">
-                  ${rows.length === 0 ? `
-                    <div class="rounded-2xl border border-dashed border-white/10 bg-black/20 p-10 text-center text-zinc-400">Henüz kayıt yok.</div>
-                  ` : rows.map((record) => `
-                    <div class="rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                        <div class="space-y-2 flex-1">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-lg font-semibold">${record.customerName}</span>
-                            <span class="inline-flex rounded-xl bg-white/10 px-3 py-1 text-xs text-white">${record.recordNo}</span>
-                            <span class="inline-flex rounded-xl bg-white/10 px-3 py-1 text-xs text-white">${record.status}</span>
-                            <span class="inline-flex rounded-xl bg-emerald-500/20 px-3 py-1 text-xs text-emerald-300 font-semibold">
-  🚗 ${record.plaka || "-"}
-</span>
-                          </div>
-                          <div class="text-sm text-zinc-400">${record.phone} · ${record.brand} ${record.model} · ${record.plaka || "-"}</div>
-                          <div class="text-sm text-zinc-500">İşlemler: ${(record.operations || []).map((op) => op.name).join(", ") || "-"}</div>
-                          <div class="text-sm font-semibold text-emerald-300">Bu Kayıt Toplamı: ${formatMoney(recordTotal(record))}</div>
-                          <div class="text-sm text-zinc-500">Kayıt: ${formatDateTime(record.createdAt)}</div>
-                          <div class="text-sm text-zinc-500">Kusurlar: ${record.vehicleDefects || "-"}</div>
-                        </div>
-
-                        <div class="flex w-full flex-col gap-3 xl:w-[430px]">
-                          <div class="grid gap-3 md:grid-cols-2">
-                            <div>
-                              <label class="mb-1 block text-xs text-zinc-400">Durum</label>
-                              <select data-inline-status="${record.id}" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white">
-                                ${STATUS_OPTIONS.map((status) => `<option value="${status}" ${record.status === status ? "selected" : ""}>${status}</option>`).join("")}
-                              </select>
-                            </div>
-                            <div>
-                              <label class="mb-1 block text-xs text-zinc-400">Ustanın Adı Soyadı</label>
-                              <input data-inline-tech="${record.id}" maxlength="40" value="${record.technician || ""}" placeholder="Usta Ad Soyad" class="w-full rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm text-white" />
-                            </div>
-                          </div>
-
-                          <div class="flex flex-wrap gap-2">
-                            <button data-detail="${record.id}" class="rounded-2xl bg-zinc-800 px-4 py-2 text-sm text-white hover:bg-zinc-700">Detay</button>
-                            <button data-edit="${record.id}" class="rounded-2xl bg-amber-400 px-4 py-2 text-sm font-medium text-black hover:bg-amber-300">Forma Al</button>
-                            <button data-print="${record.id}" class="rounded-2xl bg-zinc-800 px-4 py-2 text-sm text-white hover:bg-zinc-700">⬇️ Fiş</button>
-                            
-                            <button data-delete="${record.id}" class="rounded-2xl bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-500">🗑️ Sil</button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  `).join("")}
-
-                  ${canShowMore ? `<button id="showMoreBtn" class="mt-2 rounded-2xl border border-white/10 bg-zinc-800 px-4 py-3 text-sm text-white hover:bg-zinc-700">Daha Fazla Göster</button>` : ""}
-                </div>
-              </div>
-            ` : ""}
-
-            ${state.activeTab === "kurulum" && !state.tabletMode ? `
-              <div class="grid gap-4 lg:grid-cols-3">
-                <div class="lg:col-span-2 rounded-3xl border border-white/10 bg-zinc-900/90 text-white">
-                  <div class="p-6 pb-3"><h2 class="text-lg font-semibold">Bu sürümde hazır olanlar</h2></div>
-                  <div class="grid gap-3 p-6 pt-0 text-sm text-zinc-300">
-                    <div class="rounded-2xl border border-white/10 bg-black/20 p-4">• Pro Supabase arama</div>
-                    <div class="rounded-2xl border border-white/10 bg-black/20 p-4">• Kaydı güncelle modu</div>
-                    <div class="rounded-2xl border border-white/10 bg-black/20 p-4">• Scroll bozmayan işlem seçimi</div>
-                    <div class="rounded-2xl border border-white/10 bg-black/20 p-4">• Liste kademeli yükleme</div>
-                    <div class="rounded-2xl border border-white/10 bg-black/20 p-4">• PWA hazırlığı</div>
-                  </div>
-                </div>
-                <div class="rounded-3xl border border-white/10 bg-zinc-900/90 text-white">
-                  <div class="p-6 pb-3"><h2 class="text-lg font-semibold">Sonraki adımlar</h2></div>
-                  <div class="space-y-3 p-6 pt-0 text-sm text-zinc-300">
-                    <div>🔐 Kullanıcı girişi</div>
-                    <div>📩 Müşteri bilgilendirme</div>
-                    <div>🧾 Teklif / tahsilat alanı</div>
-                    <div>📦 İş emri raporları</div>
-                  </div>
-                </div>
-              </div>
-            ` : ""}
           </div>
 
-          ${showModal ? `
-            <div id="modalOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-              <div class="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 text-white shadow-2xl">
-                <div class="flex justify-end p-3"><button id="closeModal" class="rounded-2xl border border-white/10 bg-transparent px-4 py-2 text-sm text-white hover:bg-white/5">✕</button></div>
-                <div class="px-6 pb-6 space-y-4">
-                  <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <h2 class="text-lg font-semibold">${selected.customerName || "-"} · ${selected.recordNo || "-"}</h2>
-                      <div class="mt-1 text-sm text-zinc-400">${selected.phone || "-"} · ${selected.brand || "-"} ${selected.model || ""}</div>
-                    </div>
-                    <div class="w-full md:w-72">
-                      <label class="mb-2 block text-sm text-zinc-300">Durum</label>
-                      <select id="detailStatusSelect" class="w-full rounded-2xl border border-white/10 bg-zinc-900 px-3 py-2 text-sm text-white">
-                        ${STATUS_OPTIONS.map((status) => `<option value="${status}" ${selected.status === status ? "selected" : ""}>${status}</option>`).join("")}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <h3 class="mb-2 font-semibold">Müşteri Bilgileri</h3>
-                      <div class="space-y-2 text-sm text-zinc-300">
-                        <div><span class="text-zinc-500">Telefon:</span> ${selected.phone || "-"}</div>
-                        <div><span class="text-zinc-500">Fatura Adresi:</span> ${selected.invoiceAddress || "-"}</div>
-                        <div><span class="text-zinc-500">Usta:</span> ${selected.technician || "-"}</div>
-                      </div>
-                    </div>
-                    <div>
-  <h3 class="mb-2 font-semibold">Plaka Geçmişi</h3>
-  <div class="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300 space-y-2">
-    ${selectedPlateHistory.length
-      ? selectedPlateHistory
-          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-          .map((item) => `
-            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2 last:border-0 last:pb-0">
-              <div>
-                <div class="font-medium text-white">${item.recordNo}</div>
-                <div class="text-xs text-zinc-400">${formatDateTime(item.createdAt)}</div>
-              </div>
-              <div class="text-right">
-                <div class="text-xs text-zinc-400">${item.brand || "-"} ${item.model || ""}</div>
-                <div class="text-sm font-semibold text-emerald-300">${formatMoney(recordTotal(item))}</div>
-              </div>
+          <section className="mt-6 rounded-[28px] border border-dashed border-white/10 bg-zinc-900/40 p-4 sm:p-5">
+            <h3 className="text-lg font-semibold">Apps Script bağlantı notu</h3>
+            <div className="mt-3 space-y-2 text-sm text-zinc-400">
+              <p>1. En üstteki <span className="text-white">API_URL</span> değerine Web App URL’ni yapıştır.</p>
+              <p>2. GET tarafında <span className="text-white">action=listProducts</span> ve <span className="text-white">action=listMovements</span> dönecek.</p>
+              <p>3. POST tarafında <span className="text-white">action=saveStockMovement</span> ile stok hareketi kaydedilecek.</p>
+              <p>4. Bu haliyle demo veriyle bile akışı gösterir; URL gelince canlıya döner.</p>
             </div>
-          `).join("")
-      : `<div class="text-zinc-500">Bu plakaya ait başka kayıt yok.</div>`}
-  </div>
-</div>
-                    <div>
-  <h3 class="mb-2 font-semibold">Araç Bilgileri</h3>
-  <div class="space-y-2 text-sm text-zinc-300">
-    <div><span class="text-zinc-500">Plaka:</span> ${selected.plaka || "-"}</div>
-    <div><span class="text-zinc-500">Şasi No:</span> ${selected.sasiNo || "-"}</div>
-    <div><span class="text-zinc-500">Araç Marka:</span> ${selected.brand || "-"}</div>
-    <div><span class="text-zinc-500">Araç Modeli:</span> ${selected.model || "-"}</div>
-  </div>
-</div>
-                  </div>
-
-                  <div>
-                    <h3 class="mb-2 font-semibold">Araçta Görülen Kusurlar</h3>
-                    <div class="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300">${selected.vehicleDefects || "-"}</div>
-                  </div>
-
-                  <div class="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                    <div>
-                      <h3 class="mb-2 font-semibold">Yapılacak İşlemler</h3>
-                      <div class="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300 space-y-2">
-                        ${(selected.operations || []).length ? selected.operations.map((op) => `<div class="flex items-center justify-between gap-3 border-b border-white/5 pb-2 last:border-0 last:pb-0"><span>${op.name}</span><strong>${op.fee ? formatMoney(op.fee) : "-"}</strong></div>`).join("") : `<div>-</div>`}
-                        <div class="mt-3 border-t border-white/10 pt-3 text-sm font-semibold text-emerald-300">Toplam: ${formatMoney(recordTotal(selected))}</div>
-                      </div>
-                    </div>
-                    <div>
-                      <h3 class="mb-2 font-semibold">Araç Görseli</h3>
-                      ${selected.vehicleImage ? `<img src="${selected.vehicleImage}" class="h-56 w-full rounded-2xl border border-white/10 object-cover" />` : `<div class="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-zinc-500">Görsel yok</div>`}
-                      <div class="mt-4">
-                        <h3 class="mb-2 font-semibold">İmza</h3>
-                        ${selected.signature ? `<img src="${selected.signature}" class="h-40 w-full rounded-2xl border border-white/10 object-contain bg-black/20" />` : `<div class="rounded-2xl border border-dashed border-white/10 p-6 text-sm text-zinc-500">İmza yok</div>`}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 class="mb-2 font-semibold">Ek Notlar</h3>
-                    <div class="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300">${selected.noteText || "-"}</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ` : ""}
-        </div>
-      `;
-document.querySelectorAll('input[type="checkbox"][data-form]').forEach((el) => {
-  el.onchange = (e) => {
-    updateForm(el.getAttribute("data-form"), e.target.checked);
-  };
-});      
-      document.getElementById("toggleTablet")?.addEventListener("click", () => {
-        state.tabletMode = !state.tabletMode;
-        render();
-      });
-
-      document.querySelectorAll("[data-tab]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          state.activeTab = btn.dataset.tab;
-          render();
-        });
-      });
-
-      document.querySelectorAll("[data-form]").forEach((el) => {
-        el.addEventListener("input", (e) => updateForm(el.dataset.form, e.target.value));
-        el.addEventListener("change", (e) => updateForm(el.dataset.form, e.target.value));
-      });
-document.getElementById("brandSelect")?.addEventListener("change", (e) => {
-  state.form.brand = e.target.value;
-  state.form.model = "";
-  state.form.type = "";
-  render();
-});
-
-document.getElementById("modelSelect")?.addEventListener("change", (e) => {
-  state.form.model = e.target.value;
-  state.form.type = "";
-  render();
-});
-
-document.getElementById("typeSelect")?.addEventListener("change", (e) => {
-  state.form.type = e.target.value;
-});
-      document.querySelectorAll("[data-company]").forEach((el) => {
-        el.addEventListener("input", (e) => updateCompany(el.dataset.company, e.target.value));
-      });
-
-  // işlem adı
-document.querySelectorAll("[data-op-name]").forEach((el) => {
-  el.addEventListener("input", (e) => {
-    updateOperationRow(
-      Number(el.getAttribute("data-op-name")),
-      "name",
-      e.target.value,
-      false
-    );
-  });
-});
-
-// ücret
-document.querySelectorAll("[data-op-fee]").forEach((el) => {
-  el.addEventListener("input", (e) => {
-    updateOperationRow(
-      Number(el.getAttribute("data-op-fee")),
-      "fee",
-      e.target.value,
-      false
-    );
-  });
-
-  el.addEventListener("blur", (e) => {
-    updateOperationRow(
-      Number(el.getAttribute("data-op-fee")),
-      "fee",
-      e.target.value,
-      true
-    );
-  });
-});
-document.querySelectorAll("[data-op-remove]").forEach((el) => {
-  el.onclick = () => {
-    removeOperationRow(Number(el.getAttribute("data-op-remove")));
-  };
-});
-
-const addOpBtn = document.getElementById("addOperationRow");
-if (addOpBtn) {
-  addOpBtn.onclick = () => addOperationRow();
+          </section>
+        </main>
+      </div>
+    </div>
+  );
 }
-      document.getElementById("vehicleImageInput")?.addEventListener("change", (e) => handleVehicleImage(e.target.files?.[0]));
-      document.getElementById("removeVehicleImage")?.addEventListener("click", () => {
-        state.form.vehicleImage = "";
-        render();
-      });
-
-      document.getElementById("saveRecord")?.addEventListener("click", saveRecord);
-      document.getElementById("updateRecord")?.addEventListener("click", updateCurrentRecord);
-      document.getElementById("cancelEdit")?.addEventListener("click", cancelEdit);
-      document.getElementById("exportCsv")?.addEventListener("click", exportCsv);
-      document.getElementById("exportJson")?.addEventListener("click", exportJson);
-      document.getElementById("resetForm")?.addEventListener("click", () => {
-        state.form = emptyForm();
-        state.editId = null;
-        signatureHandlersBound = false;
-        render();
-      });
-
- const searchEl = document.getElementById("search");
-
-if (searchEl) {
-  searchEl.addEventListener("input", (e) => {
-    state.searchDraft = e.target.value;
-  });
-
-  searchEl.addEventListener("keydown", async (e) => {
-    if (e.key === "Enter") {
-      state.search = state.searchDraft;
-      state.visibleCount = PAGE_SIZE;
-      await loadRecordsFromDb();
-    }
-  });
-
-  searchEl.addEventListener("blur", async () => {
-    if (state.search !== state.searchDraft) {
-      state.search = state.searchDraft;
-      state.visibleCount = PAGE_SIZE;
-      await loadRecordsFromDb();
-    }
-  });
-}
-
-      document.getElementById("statusFilter")?.addEventListener("change", async (e) => {
-        state.statusFilter = e.target.value;
-        state.visibleCount = PAGE_SIZE;
-        await loadRecordsFromDb();
-      });
-
-      document.getElementById("showMoreBtn")?.addEventListener("click", async () => {
-        state.visibleCount += PAGE_SIZE;
-        await loadRecordsFromDb();
-      });
-
-      document.querySelectorAll("[data-detail]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          state.selectedId = btn.dataset.detail || null;
-          render();
-        });
-      });
-
-      document.querySelectorAll("[data-edit]").forEach((btn) => {
-        btn.addEventListener("click", () => loadRecordToForm(btn.dataset.edit));
-      });
-
-      document.querySelectorAll("[data-delete]").forEach((btn) => {
-        btn.addEventListener("click", () => deleteRecord(btn.dataset.delete));
-      });
-
-      document.querySelectorAll("[data-print]").forEach((btn) => {
-        btn.addEventListener("click", () => printReceipt(btn.dataset.print));
-      });
-
-      document.querySelectorAll("[data-inline-status]").forEach((el) => {
-        el.addEventListener("change", async (e) => {
-          await updateRecordStatus(el.dataset.inlineStatus, e.target.value);
-        });
-      });
-
-      document.querySelectorAll("[data-inline-tech]").forEach((el) => {
-        let timer = null;
-        const save = async () => {
-          await updateRecordTechnician(el.dataset.inlineTech, el.value.trim());
-        };
-        el.addEventListener("input", () => {
-          clearTimeout(timer);
-          timer = setTimeout(save, 700);
-        });
-        el.addEventListener("blur", save);
-      });
-
-      document.getElementById("detailStatusSelect")?.addEventListener("change", async (e) => {
-        const selectedCurrent = selectedRecord();
-        if (selectedCurrent) await updateRecordStatus(selectedCurrent.id, e.target.value);
-      });
-
-      document.getElementById("closeModal")?.addEventListener("click", () => {
-        state.selectedId = null;
-        render();
-      });
-
-      document.getElementById("modalOverlay")?.addEventListener("click", (e) => {
-        if (e.target.id === "modalOverlay") {
-          state.selectedId = null;
-          render();
-        }
-      });
-     
-      setupSignaturePad();
-    }
-
-    function setupSignaturePad() {
-  if (state.activeTab !== "kayit") return;
-
-  const canvas = document.getElementById("signaturePad");
-  if (!canvas) return;
-
-  const ctx = canvas.getContext("2d");
-  let drawing = false;
-
-  function resizeCanvas(keepSignature = true) {
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    const rect = canvas.getBoundingClientRect();
-
-    const oldSignature = keepSignature ? state.form.signature : "";
-
-    canvas.width = Math.max(1, Math.floor(rect.width * ratio));
-    canvas.height = Math.max(1, Math.floor(180 * ratio));
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(ratio, ratio);
-
-    repaint(oldSignature);
-  }
-
-  function repaint(signatureData = state.form.signature) {
-    const rect = canvas.getBoundingClientRect();
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    ctx.fillStyle = "#09090b";
-    ctx.fillRect(0, 0, rect.width, rect.height);
-
-    if (signatureData) {
-      const img = new Image();
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, rect.width, rect.height);
-      };
-      img.src = signatureData;
-    }
-  }
-
-  const getPos = (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const point = e.touches ? e.touches[0] : e;
-    return {
-      x: point.clientX - rect.left,
-      y: point.clientY - rect.top
-    };
-  };
-
-  const start = (e) => {
-    drawing = true;
-    const { x, y } = getPos(e);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "#ffffff";
-  };
-
-  const move = (e) => {
-    if (!drawing) return;
-    if (e.cancelable) e.preventDefault();
-    const { x, y } = getPos(e);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-
-  const end = () => {
-    if (!drawing) return;
-    drawing = false;
-    state.form.signature = canvas.toDataURL("image/png");
-  };
-
-  resizeCanvas(true);
-
-  if (!canvas.dataset.bound) {
-    canvas.onmousedown = start;
-    canvas.onmousemove = move;
-    canvas.onmouseup = end;
-    canvas.onmouseleave = end;
-
-    canvas.ontouchstart = start;
-    canvas.ontouchmove = move;
-    canvas.ontouchend = end;
-
-    canvas.dataset.bound = "1";
-
-    document.getElementById("clearSignature")?.addEventListener("click", () => {
-      state.form.signature = "";
-      repaint("");
-    });
-
-    window.addEventListener("resize", () => {
-      resizeCanvas(true);
-    });
-
-    window.addEventListener("orientationchange", () => {
-      setTimeout(() => resizeCanvas(true), 250);
-    });
-  }
-
-  signatureHandlersBound = true;
-}
-
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch((err) => {
-          console.error("Service worker kayıt hatası:", err);
-        });
-      });
-    }
-    const aracVerileri = {
-  "Alfa Romeo": {
-    "145/146": ["Hatchback"],
-    "147": ["Hatchback"],
-    "156": ["Sedan", "Stationwagon"],
-    "159": ["Sedan", "Stationwagon"],
-    "166": ["Sedan"],
-    "Brera / Spider": ["Coupe", "Cabrio"],
-    "Giulia": ["Sedan"],
-    "Giulietta": ["Hatchback"],
-    "GT": ["Coupe"],
-    "Junior": ["Crossover"],
-    "MiTo": ["Hatchback"],
-    "Stelvio": ["SUV"],
-    "Tonale": ["SUV"]
-  },
-  "Audi": {
-    "100 / A6": ["Sedan", "Stationwagon"],
-    "80/90": ["Sedan", "Stationwagon", "Coupe"],
-    "A1": ["Hatchback"],
-    "A1 Sportback": ["Hatchback"],
-    "A3": ["Hatchback"],
-    "A3 Sedan": ["Sedan"],
-    "A3 Sportback": ["Hatchback"],
-    "A4": ["Sedan", "Stationwagon", "Cabrio"],
-    "A5": ["Coupe", "Cabrio", "Hatchback"],
-    "A6": ["Sedan", "Stationwagon"],
-    "A7 Sportback": ["Hatchback"],
-    "A8": ["Sedan"],
-    "e-tron / Q8 e-tron": ["SUV"],
-    "e-tron GT": ["Elektrikli"],
-    "e-tron Sportback / Q8 Sportback e-tron": ["SUV", "Coupe"],
-    "Q2": ["SUV"],
-    "Q3": ["SUV", "Coupe"],
-    "Q4 e-tron": ["SUV"],
-    "Q4 Sportback e-tron": ["SUV", "Coupe"],
-    "Q5": ["SUV", "Coupe"],
-    "Q6 e-tron": ["SUV"],
-    "Q6 Sportback e-tron": ["SUV", "Coupe"],
-    "Q7": ["SUV"],
-    "Q8": ["SUV", "Coupe"],
-    "SQ2": ["SUV"],
-    "SQ5": ["SUV", "Coupe"],
-    "TT": ["Coupe", "Roadster"],
-    "TTS / TT RS": ["Coupe", "Roadster"]
-  },
-  "BMW": {
-    "1 Serisi": ["Hatchback"],
-    "2 Active Tourer": ["MPV"],
-    "2 Gran Coupe": ["Sedan"],
-    "2 Serisi Coupe/Cabrio": ["Coupe", "Cabrio"],
-    "3 Serisi": ["Sedan", "Stationwagon"],
-    "4 Serisi": ["Coupe", "Cabrio", "Hatchback"],
-    "5 Serisi": ["Sedan", "Stationwagon"],
-    "6 Serisi GT": ["Hatchback"],
-    "7 Serisi": ["Sedan"],
-    "i3": ["Hatchback"],
-    "i4": ["Elektrikli Sedan"],
-    "i5": ["Elektrikli Sedan", "Elektrikli Stationwagon"],
-    "i7": ["Elektrikli Sedan"],
-    "iX": ["Elektrikli SUV"],
-    "iX1": ["Elektrikli SUV"],
-    "iX2": ["Elektrikli SUV", "Elektrikli Coupe"],
-    "iX3": ["Elektrikli SUV"],
-    "X1": ["SUV"],
-    "X2": ["SUV", "Coupe"],
-    "X3": ["SUV"],
-    "X4": ["SUV", "Coupe"],
-    "X5": ["SUV"],
-    "X6": ["SUV", "Coupe"],
-    "X7": ["SUV"],
-    "Z4": ["Roadster"]
-  },
-  "BYD": {
-    "Atto 3": ["Elektrikli SUV"],
-    "Dolphin": ["Elektrikli Hatchback"],
-    "Han": ["Elektrikli Sedan"],
-    "Seal": ["Elektrikli Sedan"],
-    "Seal U": ["SUV"],
-    "Seal U DM-i": ["SUV"],
-    "Tang": ["Elektrikli SUV"]
-  },
-  "Chery": {
-    "Omoda 5": ["SUV"],
-    "Tiggo 7 Pro": ["SUV"],
-    "Tiggo 8 Pro": ["SUV"]
-  },
-  "Chevrolet": {
-    "Aveo": ["Sedan", "Hatchback"],
-    "Camaro": ["Coupe", "Cabrio"],
-    "Captiva": ["SUV"],
-    "Corvette": ["Coupe", "Cabrio"],
-    "Cruze": ["Sedan", "Hatchback", "Stationwagon"],
-    "Epica": ["Sedan"],
-    "Kalos": ["Sedan", "Hatchback"],
-    "Lacetti": ["Sedan", "Hatchback", "Stationwagon"],
-    "Malibu": ["Sedan"],
-    "Orlando": ["MPV"],
-    "Spark": ["Hatchback"],
-    "Trax": ["SUV"]
-  },
-  "Citroen": {
-    "AMI": ["Elektrikli Hatchback"],
-    "Berlingo": ["Panelvan", "MPV"],
-    "C-Elysee": ["Sedan"],
-    "C1": ["Hatchback"],
-    "C2": ["Hatchback"],
-    "C3": ["Hatchback", "SUV"],
-    "C3 Aircross": ["SUV"],
-    "C4": ["Hatchback", "SUV"],
-    "C4 Cactus": ["Crossover"],
-    "C4 X": ["Sedan"],
-    "C5": ["Sedan", "Stationwagon"],
-    "C5 Aircross": ["SUV"],
-    "C5 X": ["Stationwagon", "Crossover"],
-    "C8": ["MPV"],
-    "Jumpy / Spacetourer": ["Panelvan", "MPV"]
-  },
-  "Cupra": {
-    "Ateca": ["SUV"],
-    "Born": ["Elektrikli Hatchback"],
-    "Formentor": ["SUV", "Coupe"],
-    "Leon": ["Hatchback", "Stationwagon"],
-    "Tavascan": ["Elektrikli SUV", "Elektrikli Coupe"],
-    "Terramar": ["SUV"]
-  },
-  "Dacia": {
-    "Bigster": ["SUV"],
-    "Dokker": ["Panelvan", "MPV"],
-    "Duster": ["SUV"],
-    "Jogger": ["Stationwagon", "MPV"],
-    "Lodgy": ["MPV"],
-    "Logan": ["Sedan", "Stationwagon"],
-    "Sandero": ["Hatchback"],
-    "Sandero Stepway": ["Hatchback"]
-  },
-  "DFSK": {
-    "E5": ["SUV"],
-    "F5": ["SUV", "Coupe"],
-    "Glory 580": ["SUV"],
-    "Seres 3": ["Elektrikli SUV"]
-  },
-  "Fiat": {
-    "124 Spider": ["Roadster"],
-    "500": ["Hatchback", "Elektrikli Hatchback"],
-    "500L": ["MPV"],
-    "500X": ["SUV"],
-    "Albea": ["Sedan"],
-    "Brava / Bravo": ["Hatchback"],
-    "Coupe": ["Coupe"],
-    "Doblo": ["Panelvan", "MPV"],
-    "Ducato": ["Panelvan", "Minibüs"],
-    "Egea": ["Sedan", "Hatchback", "Stationwagon", "Crossover"],
-    "Fiorino / Qubo": ["Panelvan", "MPV"],
-    "Freemont": ["SUV"],
-    "Grande Punto / Punto Evo / Punto": ["Hatchback"],
-    "Linea": ["Sedan"],
-    "Marea": ["Sedan", "Stationwagon"],
-    "Multipla": ["MPV"],
-    "Palio / Siena / Albea": ["Hatchback", "Sedan"],
-    "Panda": ["Hatchback"],
-    "Scudo / Ulysse": ["Panelvan", "MPV"],
-    "Stilo": ["Hatchback", "Sedan", "Stationwagon"],
-    "Tempra / Tipo": ["Sedan", "Hatchback", "Stationwagon"],
-    "Tipo": ["Hatchback", "Sedan", "Stationwagon"]
-  },
-  "Ford": {
-    "B-Max": ["MPV"],
-    "C-Max / Grand C-Max": ["MPV"],
-    "Courier": ["Panelvan", "MPV"],
-    "EcoSport": ["SUV"],
-    "Edge": ["SUV"],
-    "Explorer EV": ["Elektrikli SUV"],
-    "Fiesta": ["Hatchback"],
-    "Focus": ["Hatchback", "Sedan", "Stationwagon"],
-    "Fusion": ["Hatchback"],
-    "Galaxy": ["MPV"],
-    "Ka / Ka+": ["Hatchback", "Sedan"],
-    "Kuga": ["SUV"],
-    "Mondeo": ["Sedan", "Hatchback", "Stationwagon"],
-    "Mustang": ["Coupe", "Cabrio"],
-    "Mustang Mach-E": ["Elektrikli SUV"],
-    "Puma": ["SUV"],
-    "Ranger": ["Pickup"],
-    "S-Max": ["MPV"],
-    "Tourneo Connect / Grand Tourneo Connect": ["MPV"],
-    "Tourneo Courier": ["MPV"],
-    "Tourneo Custom": ["Minibüs"],
-    "Transit / Transit Custom": ["Panelvan", "Minibüs"],
-    "Transit Connect": ["Panelvan", "MPV"]
-  },
-  "Honda": {
-    "Accord": ["Sedan", "Coupe"],
-    "City": ["Sedan"],
-    "Civic": ["Sedan", "Hatchback"],
-    "CR-V": ["SUV"],
-    "CR-Z": ["Coupe", "Hatchback"],
-    "e:Ny1": ["Elektrikli SUV"],
-    "HR-V": ["SUV"],
-    "Insight": ["Sedan"],
-    "Jazz": ["Hatchback", "MPV"],
-    "Prelude": ["Coupe"],
-    "S2000": ["Roadster"]
-  },
-  "Hyundai": {
-    "Accent / Accent Admire": ["Sedan", "Hatchback"],
-    "Accent Blue": ["Sedan"],
-    "Accent Era": ["Sedan"],
-    "Atos": ["Hatchback"],
-    "Bayon": ["Crossover"],
-    "Coupe": ["Coupe"],
-    "Elantra": ["Sedan"],
-    "Getz": ["Hatchback"],
-    "i10": ["Hatchback"],
-    "i20": ["Hatchback"],
-    "i20 Active": ["Crossover"],
-    "i30": ["Hatchback", "Stationwagon", "Fastback"],
-    "Ioniq": ["Hatchback"],
-    "Ioniq 5": ["Elektrikli Crossover"],
-    "Ioniq 6": ["Elektrikli Sedan"],
-    "ix20": ["MPV"],
-    "ix35": ["SUV"],
-    "Kona": ["SUV", "Elektrikli SUV"],
-    "Matrix": ["MPV"],
-    "Santa Fe": ["SUV"],
-    "Sonata": ["Sedan"],
-    "Staria": ["Minibüs"],
-    "Terracan": ["SUV"],
-    "Tucson": ["SUV"],
-    "Veloster": ["Coupe", "Hatchback"]
-  },
-  "Jaguar": {
-    "E-Pace": ["SUV"],
-    "F-Pace": ["SUV"],
-    "F-Type": ["Coupe", "Cabrio"],
-    "I-Pace": ["Elektrikli SUV"],
-    "S-Type": ["Sedan"],
-    "XE": ["Sedan"],
-    "XF": ["Sedan", "Stationwagon"],
-    "XJ": ["Sedan"],
-    "XK": ["Coupe", "Cabrio"]
-  },
-  "Jeep": {
-    "Avenger": ["SUV", "Elektrikli SUV"],
-    "Cherokee": ["SUV"],
-    "Compass": ["SUV"],
-    "Gladiator": ["Pickup"],
-    "Grand Cherokee": ["SUV"],
-    "Patriot": ["SUV"],
-    "Renegade": ["SUV"],
-    "Wrangler": ["SUV"]
-  },
-  "Kia": {
-    "Bongo": ["Pickup"],
-    "Carens": ["MPV"],
-    "Carnival": ["Minibüs"],
-    "Ceed": ["Hatchback", "Stationwagon"],
-    "Cerato": ["Sedan", "Hatchback"],
-    "EV3": ["Elektrikli SUV"],
-    "EV6": ["Elektrikli Crossover"],
-    "Niro": ["SUV", "Elektrikli SUV"],
-    "Optima": ["Sedan", "Stationwagon"],
-    "Picanto": ["Hatchback"],
-    "Proceed": ["Hatchback", "Stationwagon"],
-    "Rio": ["Sedan", "Hatchback"],
-    "Sorento": ["SUV"],
-    "Soul": ["SUV", "Elektrikli SUV"],
-    "Sportage": ["SUV"],
-    "Stinger": ["Sedan", "Hatchback"],
-    "Venga": ["MPV"],
-    "XCeed": ["Crossover"]
-  },
-  "Land Rover": {
-    "Defender": ["SUV"],
-    "Discovery": ["SUV"],
-    "Discovery Sport": ["SUV"],
-    "Freelander": ["SUV"],
-    "Range Rover": ["SUV"],
-    "Range Rover Evoque": ["SUV", "Cabrio"],
-    "Range Rover Sport": ["SUV"],
-    "Range Rover Velar": ["SUV"]
-  },
-  "Lexus": {
-    "CT": ["Hatchback"],
-    "ES": ["Sedan"],
-    "GS": ["Sedan"],
-    "IS": ["Sedan"],
-    "LBX": ["SUV"],
-    "LC": ["Coupe", "Cabrio"],
-    "LS": ["Sedan"],
-    "NX": ["SUV"],
-    "RC": ["Coupe"],
-    "RX": ["SUV"],
-    "RZ": ["Elektrikli SUV"],
-    "UX": ["SUV", "Elektrikli SUV"]
-  },
-  "Mazda": {
-    "2": ["Hatchback", "Sedan"],
-    "3": ["Hatchback", "Sedan"],
-    "5": ["MPV"],
-    "6": ["Sedan", "Stationwagon"],
-    "BT-50": ["Pickup"],
-    "CX-3": ["SUV"],
-    "CX-30": ["SUV"],
-    "CX-5": ["SUV"],
-    "CX-60": ["SUV"],
-    "CX-80": ["SUV"],
-    "MX-30": ["Elektrikli SUV"],
-    "MX-5": ["Roadster", "Coupe"]
-  },
-  "Mercedes-Benz": {
-    "A-Serisi (W168)": ["Hatchback", "MPV"],
-    "A-Serisi (W169)": ["Hatchback", "MPV"],
-    "A-Serisi (W176)": ["Hatchback"],
-    "A-Serisi Hatchback (W177)": ["Hatchback"],
-    "A-Serisi Sedan (V177)": ["Sedan"],
-    "B-Serisi (T245/W245)": ["MPV"],
-    "B-Serisi (W246)": ["MPV"],
-    "B-Serisi (W247)": ["MPV"],
-    "Citan (W415)": ["Panelvan", "MPV"],
-    "Citan (W420)": ["Panelvan", "MPV"],
-    "CLA (C117)": ["Coupe", "Sedan"],
-    "CLA Coupe (C118)": ["Coupe", "Sedan"],
-    "CLA Shooting Brake (X117)": ["Stationwagon"],
-    "CLA Shooting Brake (X118)": ["Stationwagon"],
-    "CLS (C218)": ["Coupe", "Sedan"],
-    "CLS (C219)": ["Coupe", "Sedan"],
-    "CLS (C257)": ["Coupe", "Sedan"],
-    "C-Serisi Cabriolet (A205)": ["Cabrio"],
-    "C-Serisi Coupe (C204)": ["Coupe"],
-    "C-Serisi Coupe (C205)": ["Coupe"],
-    "C-Serisi Sedan (W202)": ["Sedan"],
-    "C-Serisi Sedan (W203)": ["Sedan"],
-    "C-Serisi Sedan (W204)": ["Sedan"],
-    "C-Serisi Sedan (W205)": ["Sedan"],
-    "C-Serisi Sedan (W206)": ["Sedan"],
-    "C-Serisi SportCoupe (CL203)": ["Coupe", "Hatchback"],
-    "C-Serisi Station (S203)": ["Stationwagon"],
-    "C-Serisi Station (S204)": ["Stationwagon"],
-    "C-Serisi Station (S205)": ["Stationwagon"],
-    "C-Serisi Station (S206)": ["Stationwagon"],
-    "EQA (H243)": ["Elektrikli SUV"],
-    "EQB (X243)": ["Elektrikli SUV"],
-    "EQC (N293)": ["Elektrikli SUV"],
-    "EQE (V295)": ["Elektrikli Sedan"],
-    "EQE SUV (X294)": ["Elektrikli SUV"],
-    "EQS (V297)": ["Elektrikli Sedan"],
-    "EQS SUV (X296)": ["Elektrikli SUV"],
-    "E-Serisi Cabriolet (A207)": ["Cabrio"],
-    "E-Serisi Cabriolet (A238)": ["Cabrio"],
-    "E-Serisi Coupe (C207)": ["Coupe"],
-    "E-Serisi Coupe (C238)": ["Coupe"],
-    "E-Serisi Sedan (W123)": ["Sedan"],
-    "E-Serisi Sedan (W124)": ["Sedan"],
-    "E-Serisi Sedan (W210)": ["Sedan"],
-    "E-Serisi Sedan (W211)": ["Sedan"],
-    "E-Serisi Sedan (W212)": ["Sedan"],
-    "E-Serisi Sedan (W213)": ["Sedan"],
-    "E-Serisi Sedan (W214)": ["Sedan"],
-    "E-Serisi Station (S123)": ["Stationwagon"],
-    "E-Serisi Station (S124)": ["Stationwagon"],
-    "E-Serisi Station (S210)": ["Stationwagon"],
-    "E-Serisi Station (S211)": ["Stationwagon"],
-    "E-Serisi Station (S212)": ["Stationwagon"],
-    "E-Serisi Station (S213)": ["Stationwagon"],
-    "E-Serisi Station (S214)": ["Stationwagon"],
-    "G-Serisi / G-Wagon (W460/W461/W463)": ["SUV"],
-    "GLA (H247/X156)": ["SUV"],
-    "GLB (X247)": ["SUV"],
-    "GLC Coupe (C253/C254)": ["SUV", "Coupe"],
-    "GLC SUV (X253/X254)": ["SUV"],
-    "GLE Coupe (C167)": ["SUV", "Coupe"],
-    "GLE SUV (V167/W166)": ["SUV"],
-    "GLK (X204)": ["SUV"],
-    "GLS (X166/X167)": ["SUV"],
-    "M-Serisi / ML (W163/W164/W166)": ["SUV"],
-    "SL (R107/R129/R230/R231/R232)": ["Roadster"],
-    "SLC / SLK (R170/R171/R172)": ["Roadster"],
-    "S-Serisi Coupe/Cabriolet (A217/C217)": ["Cabrio", "Coupe"],
-    "S-Serisi Sedan (W116/W126/W140/W220/W221/W222/W223)": ["Sedan"],
-    "T-Serisi (W420)": ["MPV"],
-    "V-Serisi / Vito / Marco Polo (W447/W448/W638/W639)": ["Panelvan", "MPV", "Minibüs"],
-    "X-Serisi (W470)": ["Pickup"]
-  },
-  "MG": {
-    "Cyberster": ["Roadster"],
-    "HS": ["SUV"],
-    "Marvel R": ["Elektrikli SUV"],
-    "MG4": ["Elektrikli Hatchback"],
-    "MG7": ["Sedan"],
-    "ZS": ["SUV", "Elektrikli SUV"]
-  },
-  "Mini": {
-    "Clubman": ["Stationwagon"],
-    "Convertible": ["Cabrio"],
-    "Countryman": ["SUV"],
-    "Coupe/Roadster": ["Coupe", "Roadster"],
-    "Hatch": ["Hatchback"],
-    "Paceman": ["SUV", "Coupe"]
-  },
-  "Mitsubishi": {
-    "ASX": ["SUV"],
-    "Attrage / Space Star Sedan": ["Sedan"],
-    "Carisma": ["Sedan", "Hatchback"],
-    "Colt": ["Hatchback", "Cabrio"],
-    "Eclipse Cross": ["SUV"],
-    "Galant": ["Sedan"],
-    "Grandis": ["MPV"],
-    "L200": ["Pickup"],
-    "Lancer": ["Sedan", "Hatchback", "Stationwagon"],
-    "Outlander": ["SUV"],
-    "Pajero": ["SUV"],
-    "Space Star": ["Hatchback"]
-  },
-  "Nissan": {
-    "350Z / 370Z": ["Coupe", "Roadster"],
-    "Almera": ["Sedan", "Hatchback"],
-    "Cabstar": ["Pickup"],
-    "GT-R": ["Coupe"],
-    "Juke": ["SUV", "Coupe"],
-    "Leaf": ["Elektrikli Hatchback"],
-    "Micra": ["Hatchback"],
-    "Navara": ["Pickup"],
-    "Note": ["Hatchback", "MPV"],
-    "Pathfinder": ["SUV"],
-    "Patrol": ["SUV"],
-    "Primera": ["Sedan", "Hatchback", "Stationwagon"],
-    "Pulsar": ["Hatchback"],
-    "Qashqai": ["SUV"],
-    "Townstar": ["Panelvan", "MPV"],
-    "X-Trail": ["SUV"]
-  },
-  "Opel": {
-    "Adam": ["Hatchback"],
-    "Agila": ["Hatchback", "MPV"],
-    "Astra": ["Hatchback", "Sedan", "Stationwagon", "Coupe", "Cabrio"],
-    "Calibra": ["Coupe"],
-    "Combo": ["Panelvan", "MPV"],
-    "Corsa": ["Hatchback", "Sedan"],
-    "Crossland": ["SUV"],
-    "Frontera": ["SUV"],
-    "Grandland": ["SUV"],
-    "Insignia": ["Sedan", "Stationwagon", "Hatchback"],
-    "Manta": ["Coupe"],
-    "Meriva": ["MPV"],
-    "Mokka": ["SUV", "Elektrikli SUV"],
-    "Omega": ["Sedan", "Stationwagon"],
-    "Signum": ["Hatchback"],
-    "Tigra / Tigra TwinTop": ["Coupe", "Cabrio"],
-    "Vectra": ["Sedan", "Hatchback", "Stationwagon"],
-    "Vivaro / Zafira Life": ["Panelvan", "Minibüs"],
-    "Zafira": ["MPV"]
-  },
-  "Peugeot": {
-    "106": ["Hatchback"],
-    "107/108": ["Hatchback"],
-    "205": ["Hatchback", "Cabrio"],
-    "206": ["Hatchback", "Sedan", "Stationwagon", "Cabrio"],
-    "207": ["Hatchback", "Stationwagon", "Cabrio"],
-    "208": ["Hatchback", "Elektrikli Hatchback"],
-    "3008": ["SUV"],
-    "301": ["Sedan"],
-    "306": ["Hatchback", "Sedan", "Cabrio", "Stationwagon"],
-    "307": ["Hatchback", "Sedan", "Stationwagon", "Cabrio"],
-    "308": ["Hatchback", "Stationwagon"],
-    "406": ["Sedan", "Stationwagon", "Coupe"],
-    "407": ["Sedan", "Stationwagon", "Coupe"],
-    "408": ["SUV", "Coupe"],
-    "5008": ["SUV", "MPV"],
-    "508": ["Sedan", "Stationwagon"],
-    "2008": ["SUV"],
-    "206+": ["Hatchback"],
-    "208 GTi": ["Hatchback"],
-    "3008 Hybrid4": ["SUV"],
-    "306 Cabriolet": ["Cabrio"],
-    "Boxer": ["Panelvan", "Minibüs"],
-    "Expert / Traveller": ["Panelvan", "Minibüs"],
-    "Partner / Rifter": ["Panelvan", "MPV"],
-    "RCZ": ["Coupe"]
-  },
-  "Porsche": {
-    "718 Boxster": ["Roadster"],
-    "718 Cayman": ["Coupe"],
-    "911": ["Coupe", "Cabrio"],
-    "Cayenne": ["SUV", "Coupe"],
-    "Macan": ["SUV", "Elektrikli SUV"],
-    "Panamera": ["Sedan", "Stationwagon"],
-    "Taycan": ["Elektrikli Sedan", "Elektrikli Stationwagon"]
-  },
-  "Renault": {
-    "Captur": ["SUV"],
-    "Clio": ["Hatchback"],
-    "Clio Grandtour": ["Stationwagon"],
-    "Espace": ["MPV", "SUV"],
-    "Express": ["Panelvan", "MPV"],
-    "Fluence": ["Sedan"],
-    "Kadjar": ["SUV"],
-    "Kangoo": ["Panelvan", "MPV"],
-    "Koleos": ["SUV"],
-    "Laguna": ["Sedan", "Hatchback", "Stationwagon", "Coupe"],
-    "Latitude": ["Sedan"],
-    "Megane": ["Hatchback", "Sedan", "Stationwagon", "Coupe", "Cabrio"],
-    "Modus / Grand Modus": ["MPV"],
-    "Rafale": ["SUV", "Coupe"],
-    "R19 / Europa": ["Sedan", "Hatchback", "Cabrio"],
-    "R21": ["Sedan", "Stationwagon", "Hatchback"],
-    "R25 / Safrane / Vel Satis": ["Sedan", "Hatchback"],
-    "Scenic / Grand Scenic": ["MPV"],
-    "Symbol / Thalia": ["Sedan"],
-    "Talisman": ["Sedan", "Stationwagon"],
-    "Twingo": ["Hatchback"],
-    "Twizy": ["Elektrikli Hatchback"],
-    "Wind": ["Roadster"],
-    "Zoe": ["Elektrikli Hatchback"],
-    "Austral": ["SUV"],
-    "Arkana": ["SUV", "Coupe"],
-    "Megane E-Tech": ["Elektrikli Hatchback"],
-    "Duster": ["SUV"]
-  },
-  "Seat": {
-    "Alhambra": ["MPV"],
-    "Arona": ["SUV"],
-    "Ateca": ["SUV"],
-    "Cordoba": ["Sedan", "Stationwagon"],
-    "Exeo": ["Sedan", "Stationwagon"],
-    "Ibiza": ["Hatchback", "Stationwagon"],
-    "Leon": ["Hatchback", "Stationwagon"],
-    "Mii": ["Hatchback"],
-    "Toledo": ["Sedan", "Hatchback"],
-    "Tarraco": ["SUV"]
-  },
-  "Skoda": {
-    "Citigo": ["Hatchback"],
-    "Enyaq": ["Elektrikli SUV", "Elektrikli Coupe"],
-    "Fabia": ["Hatchback", "Stationwagon"],
-    "Favorit / Felicia": ["Hatchback", "Stationwagon", "Pickup"],
-    "Kamiq": ["SUV"],
-    "Karoq": ["SUV"],
-    "Kodiaq": ["SUV"],
-    "Octavia": ["Sedan", "Stationwagon", "Hatchback"],
-    "Rapid / Spaceback": ["Sedan", "Hatchback"],
-    "Roomster": ["MPV"],
-    "Scala": ["Hatchback"],
-    "Superb": ["Sedan", "Stationwagon"],
-    "Yeti": ["SUV"]
-  },
-  "Subaru": {
-    "BRZ": ["Coupe"],
-    "Forester": ["SUV"],
-    "Impreza": ["Sedan", "Hatchback", "Stationwagon"],
-    "Legacy": ["Sedan", "Stationwagon"],
-    "Levorg": ["Stationwagon"],
-    "Outback": ["Stationwagon", "SUV"],
-    "Solterra": ["Elektrikli SUV"],
-    "Tribeca / B9 Tribeca": ["SUV"],
-    "WRX / STI": ["Sedan", "Hatchback"]
-  },
-  "Suzuki": {
-    "Across": ["SUV"],
-    "Alto": ["Hatchback"],
-    "Baleno": ["Hatchback"],
-    "Grand Vitara": ["SUV"],
-    "Ignis": ["Hatchback", "SUV"],
-    "Jimny": ["SUV"],
-    "Kizashi": ["Sedan"],
-    "S-Cross": ["SUV"],
-    "Splash": ["Hatchback", "MPV"],
-    "Swift": ["Hatchback"],
-    "SX4 / SX4 S-Cross": ["Sedan", "Hatchback", "SUV"],
-    "Vitara": ["SUV"],
-    "Wagon R+": ["Hatchback", "MPV"]
-  },
-  "Tesla": {
-    "Model 3": ["Elektrikli Sedan"],
-    "Model S": ["Elektrikli Sedan"],
-    "Model X": ["Elektrikli SUV"],
-    "Model Y": ["Elektrikli SUV"]
-  },
-  "Togg": {
-    "T10F": ["Elektrikli Sedan"],
-    "T10X": ["Elektrikli SUV"]
-  },
-  "Toyota": {
-    "Auris": ["Hatchback", "Stationwagon"],
-    "Avensis": ["Sedan", "Stationwagon"],
-    "Aygo": ["Hatchback"],
-    "bZ4X": ["Elektrikli SUV"],
-    "C-HR": ["SUV"],
-    "Camry": ["Sedan"],
-    "Celica": ["Coupe"],
-    "Corolla": ["Sedan", "Hatchback", "Stationwagon"],
-    "Corolla Cross": ["SUV"],
-    "GT86": ["Coupe"],
-    "Hilux": ["Pickup"],
-    "Land Cruiser": ["SUV"],
-    "Prius": ["Hatchback", "Sedan"],
-    "Proace / Proace City": ["Panelvan", "MPV"],
-    "RAV4": ["SUV"],
-    "Urban Cruiser": ["SUV"],
-    "Verso": ["MPV"],
-    "Yaris": ["Hatchback"],
-    "Yaris Cross": ["SUV"]
-  },
-  "Volkswagen": {
-    "Amarok": ["Pickup"],
-    "Arteon": ["Sedan", "Stationwagon"],
-    "Beetle / New Beetle": ["Hatchback", "Cabrio"],
-    "Bora": ["Sedan", "Stationwagon"],
-    "Caddy": ["Panelvan", "MPV"],
-    "CC": ["Sedan", "Coupe"],
-    "Crafter": ["Panelvan", "Minibüs"],
-    "Golf": ["Hatchback", "Stationwagon", "Cabrio"],
-    "ID.3": ["Elektrikli Hatchback"],
-    "ID.4": ["Elektrikli SUV"],
-    "ID.5": ["Elektrikli SUV", "Elektrikli Coupe"],
-    "Jetta": ["Sedan"],
-    "Passat": ["Sedan", "Stationwagon"],
-    "Polo": ["Hatchback"],
-    "Scirocco": ["Coupe"],
-    "Sharan": ["MPV"],
-    "T-Cross": ["SUV"],
-    "Tiguan": ["SUV"],
-    "Touareg": ["SUV"],
-    "Touran": ["MPV"],
-    "Transporter / Caravelle / Multivan": ["Panelvan", "Minibüs"],
-    "up!": ["Hatchback"],
-    "Vento": ["Sedan"]
-  },
-  "Volvo": {
-    "C30": ["Hatchback"],
-    "C40 Recharge": ["Elektrikli SUV", "Elektrikli Coupe"],
-    "C70": ["Coupe", "Cabrio"],
-    "S40": ["Sedan"],
-    "S60": ["Sedan"],
-    "S80": ["Sedan"],
-    "S90": ["Sedan"],
-    "V40": ["Hatchback"],
-    "V50": ["Stationwagon"],
-    "V60": ["Stationwagon"],
-    "V90": ["Stationwagon"],
-    "XC40": ["SUV", "Elektrikli SUV"],
-    "XC60": ["SUV"],
-    "XC90": ["SUV"],
-    "EX30": ["Elektrikli SUV"],
-    "EX40": ["Elektrikli SUV"],
-    "EC40": ["Elektrikli SUV", "Elektrikli Coupe"]
-  }
-};
-
-    (async function init() {
-      state.searchDraft = state.search;
-      await loadRecordsFromDb();
-    })();
-
-  </script>
-</body>
-</html>
