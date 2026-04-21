@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stok Takip</title>
+
+  <meta name="theme-color" content="#111827" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <h1>Stok Takip</h1>
+        <p class="muted">Barkod ile ürün giriş / çıkış / stok görüntüleme</p>
+      </div>
+      <button id="refreshBtn" class="btn secondary">Yenile</button>
+    </header>
+
+    <section class="stats-grid">
+      <div class="card stat-card">
+        <span class="stat-label">Toplam Ürün</span>
+        <strong id="totalProductCount">0</strong>
+      </div>
+
+      <div class="card stat-card">
+        <span class="stat-label">Toplam Stok</span>
+        <strong id="totalStockCount">0</strong>
+      </div>
+
+      <div class="card stat-card danger">
+        <span class="stat-label">Kritik Stok</span>
+        <strong id="criticalStockCount">0</strong>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="card">
+        <h2>Ürün Kartı</h2>
+        <form id="productForm" class="form-grid">
+          <input type="hidden" id="productId" />
+
+          <div>
+            <label>Barkod</label>
+            <input id="barcode" type="text" placeholder="Barkod okut / yaz" autocomplete="off" />
+          </div>
+
+          <div>
+            <label>Ürün Adı</label>
+            <input id="name" type="text" placeholder="Örn: Cam Rüzgarlığı" />
+          </div>
+
+          <div>
+            <label>Marka</label>
+            <input id="brand" type="text" placeholder="Örn: Rizline" />
+          </div>
+
+          <div>
+            <label>Kategori</label>
+            <input id="category" type="text" placeholder="Örn: Aksesuar" />
+          </div>
+
+          <div>
+            <label>Birim</label>
+            <input id="unit" type="text" placeholder="Adet" value="Adet" />
+          </div>
+
+          <div>
+            <label>Mevcut Stok</label>
+            <input id="stock" type="number" min="0" step="1" placeholder="0" />
+          </div>
+
+          <div>
+            <label>Minimum Stok</label>
+            <input id="minStock" type="number" min="0" step="1" placeholder="0" />
+          </div>
+
+          <div>
+            <label>Raf / Konum</label>
+            <input id="location" type="text" placeholder="Örn: A-12" />
+          </div>
+
+          <div class="full">
+            <label>Açıklama</label>
+            <textarea id="note" rows="3" placeholder="İsteğe bağlı not"></textarea>
+          </div>
+
+          <div class="full row-gap">
+            <button type="submit" id="saveProductBtn" class="btn primary">Ürünü Kaydet</button>
+            <button type="button" id="clearProductBtn" class="btn ghost">Formu Temizle</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Stok Hareketi</h2>
+        <form id="movementForm" class="form-grid">
+          <div>
+            <label>Barkod</label>
+            <input id="moveBarcode" type="text" placeholder="Önce barkod okut" autocomplete="off" />
+          </div>
+
+          <div>
+            <label>Ürün Adı</label>
+            <input id="moveName" type="text" placeholder="Ürün adı otomatik gelebilir" />
+          </div>
+
+          <div>
+            <label>İşlem Türü</label>
+            <select id="moveType">
+              <option value="GIRIS">Giriş</option>
+              <option value="CIKIS">Çıkış</option>
+            </select>
+          </div>
+
+          <div>
+            <label>Miktar</label>
+            <input id="moveQuantity" type="number" min="1" step="1" value="1" />
+          </div>
+
+          <div>
+            <label>Birim Fiyat</label>
+            <input id="moveUnitPrice" type="number" min="0" step="0.01" placeholder="0" />
+          </div>
+
+          <div>
+            <label>Tutar</label>
+            <input id="moveTotal" type="text" readonly placeholder="0,00 ₺" />
+          </div>
+
+          <div class="full">
+            <label>Hareket Notu</label>
+            <textarea id="moveNote" rows="3" placeholder="Örn: Yeni sevkiyat / müşteri çıkışı"></textarea>
+          </div>
+
+          <div class="full row-gap">
+            <button type="submit" id="saveMovementBtn" class="btn success">Hareketi Kaydet</button>
+            <button type="button" id="clearMovementBtn" class="btn ghost">Temizle</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h2>Ürün Listesi</h2>
+          <p class="muted">Arama ile filtrelenir</p>
+        </div>
+        <input id="searchInput" class="search-input" type="text" placeholder="Barkod, ürün adı, marka ara..." />
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Barkod</th>
+              <th>Ürün</th>
+              <th>Marka</th>
+              <th>Kategori</th>
+              <th>Stok</th>
+              <th>Min</th>
+              <th>Konum</th>
+              <th>İşlem</th>
+            </tr>
+          </thead>
+          <tbody id="productTableBody">
+            <tr>
+              <td colspan="8" class="empty-cell">Veri bekleniyor...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <div>
+          <h2>Son Hareketler</h2>
+          <p class="muted">En son stok giriş / çıkış kayıtları</p>
+        </div>
+      </div>
+
+      <div id="movementList" class="movement-list">
+        <div class="empty-state">Henüz hareket yok</div>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
