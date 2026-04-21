@@ -1,0 +1,408 @@
+const API_URL = "BURAYA_APPS_SCRIPT_WEB_APP_URL_YAPISTIR";
+
+const state = {
+  products: [],
+  filteredProducts: [],
+  movements: [],
+  loading: false,
+};
+
+const el = {
+  totalProductCount: document.getElementById("totalProductCount"),
+  totalStockCount: document.getElementById("totalStockCount"),
+  criticalStockCount: document.getElementById("criticalStockCount"),
+
+  refreshBtn: document.getElementById("refreshBtn"),
+
+  productForm: document.getElementById("productForm"),
+  productId: document.getElementById("productId"),
+  barcode: document.getElementById("barcode"),
+  name: document.getElementById("name"),
+  brand: document.getElementById("brand"),
+  category: document.getElementById("category"),
+  unit: document.getElementById("unit"),
+  stock: document.getElementById("stock"),
+  minStock: document.getElementById("minStock"),
+  location: document.getElementById("location"),
+  note: document.getElementById("note"),
+  saveProductBtn: document.getElementById("saveProductBtn"),
+  clearProductBtn: document.getElementById("clearProductBtn"),
+
+  movementForm: document.getElementById("movementForm"),
+  moveBarcode: document.getElementById("moveBarcode"),
+  moveName: document.getElementById("moveName"),
+  moveType: document.getElementById("moveType"),
+  moveQuantity: document.getElementById("moveQuantity"),
+  moveUnitPrice: document.getElementById("moveUnitPrice"),
+  moveTotal: document.getElementById("moveTotal"),
+  moveNote: document.getElementById("moveNote"),
+  saveMovementBtn: document.getElementById("saveMovementBtn"),
+  clearMovementBtn: document.getElementById("clearMovementBtn"),
+
+  searchInput: document.getElementById("searchInput"),
+  productTableBody: document.getElementById("productTableBody"),
+  movementList: document.getElementById("movementList"),
+  toast: document.getElementById("toast"),
+};
+
+function showToast(message, isError = false) {
+  el.toast.textContent = message;
+  el.toast.classList.remove("hidden");
+  el.toast.style.borderColor = isError ? "rgba(220,38,38,0.5)" : "rgba(22,163,74,0.5)";
+  setTimeout(() => el.toast.classList.add("hidden"), 2500);
+}
+
+function formatMoney(value) {
+  const num = Number(value || 0);
+  return num.toLocaleString("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    minimumFractionDigits: 2,
+  });
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("tr-TR");
+}
+
+function calculateMovementTotal() {
+  const qty = Number(el.moveQuantity.value || 0);
+  const unitPrice = Number(el.moveUnitPrice.value || 0);
+  el.moveTotal.value = formatMoney(qty * unitPrice);
+}
+
+async function api(action, payload = {}) {
+  if (!API_URL || API_URL.includes("BURAYA_APPS_SCRIPT")) {
+    throw new Error("API_URL henüz tanımlanmadı.");
+  }
+
+  const formData = new URLSearchParams();
+  formData.append("action", action);
+
+  Object.entries(payload).forEach(([key, value]) => {
+    formData.append(key, value ?? "");
+  });
+
+  const res = await fetch(API_URL, {
+    method: "POST",
+    body: formData,
+  });
+
+  const text = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("Sunucudan JSON dönmedi: " + text);
+  }
+
+  if (!data.ok) {
+    throw new Error(data.message || "Bilinmeyen bir hata oluştu.");
+  }
+
+  return data;
+}
+
+async function loadProducts() {
+  const data = await api("listProducts");
+  state.products = Array.isArray(data.products) ? data.products : [];
+  applySearch();
+  updateStats();
+}
+
+async function loadMovements() {
+  const data = await api("listMovements");
+  state.movements = Array.isArray(data.movements) ? data.movements : [];
+  renderMovements();
+}
+
+async function loadAll() {
+  try {
+    setLoading(true);
+    await Promise.all([loadProducts(), loadMovements()]);
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Veriler yüklenemedi", true);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setLoading(flag) {
+  state.loading = flag;
+  el.refreshBtn.disabled = flag;
+  el.saveProductBtn.disabled = flag;
+  el.saveMovementBtn.disabled = flag;
+
+  el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile";
+  el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet";
+  el.saveMovementBtn.textContent = flag ? "Kaydediliyor..." : "Hareketi Kaydet";
+}
+
+function updateStats() {
+  const totalProduct = state.products.length;
+  const totalStock = state.products.reduce((sum, p) => sum + Number(p.stock || 0), 0);
+  const critical = state.products.filter((p) => Number(p.stock || 0) <= Number(p.minStock || 0)).length;
+
+  el.totalProductCount.textContent = totalProduct;
+  el.totalStockCount.textContent = totalStock;
+  el.criticalStockCount.textContent = critical;
+}
+
+function applySearch() {
+  const q = (el.searchInput.value || "").trim().toLowerCase();
+
+  state.filteredProducts = state.products.filter((p) => {
+    const text = [
+      p.barcode,
+      p.name,
+      p.brand,
+      p.category,
+      p.location,
+      p.note,
+    ].join(" ").toLowerCase();
+
+    return text.includes(q);
+  });
+
+  renderProducts();
+}
+
+function renderProducts() {
+  if (!state.filteredProducts.length) {
+    el.productTableBody.innerHTML = `
+      <tr>
+        <td colspan="8" class="empty-cell">Kayıt bulunamadı</td>
+      </tr>
+    `;
+    return;
+  }
+
+  el.productTableBody.innerHTML = state.filteredProducts.map((p) => {
+    const isLow = Number(p.stock || 0) <= Number(p.minStock || 0);
+
+    return `
+      <tr>
+        <td>${escapeHtml(p.barcode || "-")}</td>
+        <td>${escapeHtml(p.name || "-")}</td>
+        <td>${escapeHtml(p.brand || "-")}</td>
+        <td>${escapeHtml(p.category || "-")}</td>
+        <td class="${isLow ? "low-stock" : ""}">${Number(p.stock || 0)} ${escapeHtml(p.unit || "")}</td>
+        <td>${Number(p.minStock || 0)}</td>
+        <td>${escapeHtml(p.location || "-")}</td>
+        <td>
+          <div class="action-group">
+            <button class="action-btn edit" onclick="editProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Düzenle</button>
+            <button class="action-btn delete" onclick="deleteProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Sil</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderMovements() {
+  if (!state.movements.length) {
+    el.movementList.innerHTML = `<div class="empty-state">Henüz hareket yok</div>`;
+    return;
+  }
+
+  el.movementList.innerHTML = state.movements.map((m) => {
+    const typeClass = (m.type || "").toUpperCase() === "GIRIS" ? "giris" : "cikis";
+    const typeLabel = (m.type || "").toUpperCase() === "GIRIS" ? "Giriş" : "Çıkış";
+
+    return `
+      <div class="movement-item">
+        <div class="movement-top">
+          <div>
+            <strong>${escapeHtml(m.name || "-")}</strong>
+            <div class="muted">${escapeHtml(m.barcode || "-")}</div>
+          </div>
+          <div>
+            <span class="badge ${typeClass}">${typeLabel}</span>
+          </div>
+        </div>
+
+        <div>Miktar: <strong>${Number(m.quantity || 0)}</strong></div>
+        <div>Birim Fiyat: <strong>${formatMoney(m.unitPrice || 0)}</strong></div>
+        <div>Tutar: <strong>${formatMoney(m.total || 0)}</strong></div>
+        <div>Tarih: <strong>${formatDate(m.date)}</strong></div>
+        <div>Not: <strong>${escapeHtml(m.note || "-")}</strong></div>
+      </div>
+    `;
+  }).join("");
+}
+
+function clearProductForm() {
+  el.productId.value = "";
+  el.barcode.value = "";
+  el.name.value = "";
+  el.brand.value = "";
+  el.category.value = "";
+  el.unit.value = "Adet";
+  el.stock.value = "";
+  el.minStock.value = "";
+  el.location.value = "";
+  el.note.value = "";
+}
+
+function clearMovementForm() {
+  el.moveBarcode.value = "";
+  el.moveName.value = "";
+  el.moveType.value = "GIRIS";
+  el.moveQuantity.value = "1";
+  el.moveUnitPrice.value = "";
+  el.moveTotal.value = formatMoney(0);
+  el.moveNote.value = "";
+}
+
+function fillProductForm(product) {
+  el.productId.value = product.id || "";
+  el.barcode.value = product.barcode || "";
+  el.name.value = product.name || "";
+  el.brand.value = product.brand || "";
+  el.category.value = product.category || "";
+  el.unit.value = product.unit || "Adet";
+  el.stock.value = product.stock ?? "";
+  el.minStock.value = product.minStock ?? "";
+  el.location.value = product.location || "";
+  el.note.value = product.note || "";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function findProductByBarcode(barcode) {
+  return state.products.find((p) => String(p.barcode || "").trim() === String(barcode || "").trim());
+}
+
+window.editProduct = function(id) {
+  const product = state.products.find((p) => String(p.id) === String(id));
+  if (!product) {
+    showToast("Ürün bulunamadı", true);
+    return;
+  }
+  fillProductForm(product);
+};
+
+window.deleteProduct = async function(id) {
+  const ok = confirm("Bu ürünü silmek istediğine emin misin?");
+  if (!ok) return;
+
+  try {
+    setLoading(true);
+    await api("deleteProduct", { id });
+    showToast("Ürün silindi");
+    await loadAll();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Ürün silinemedi", true);
+  } finally {
+    setLoading(false);
+  }
+};
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+el.productForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const payload = {
+    id: el.productId.value.trim(),
+    barcode: el.barcode.value.trim(),
+    name: el.name.value.trim(),
+    brand: el.brand.value.trim(),
+    category: el.category.value.trim(),
+    unit: el.unit.value.trim(),
+    stock: el.stock.value.trim(),
+    minStock: el.minStock.value.trim(),
+    location: el.location.value.trim(),
+    note: el.note.value.trim(),
+  };
+
+  if (!payload.barcode) return showToast("Barkod zorunlu", true);
+  if (!payload.name) return showToast("Ürün adı zorunlu", true);
+
+  try {
+    setLoading(true);
+    await api("saveProduct", payload);
+    showToast(payload.id ? "Ürün güncellendi" : "Ürün kaydedildi");
+    clearProductForm();
+    await loadProducts();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Ürün kaydedilemedi", true);
+  } finally {
+    setLoading(false);
+  }
+});
+
+el.movementForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const payload = {
+    barcode: el.moveBarcode.value.trim(),
+    name: el.moveName.value.trim(),
+    type: el.moveType.value,
+    quantity: el.moveQuantity.value.trim(),
+    unitPrice: el.moveUnitPrice.value.trim(),
+    note: el.moveNote.value.trim(),
+  };
+
+  if (!payload.barcode) return showToast("Hareket için barkod zorunlu", true);
+  if (!payload.name) return showToast("Ürün adı zorunlu", true);
+  if (!payload.quantity || Number(payload.quantity) <= 0) return showToast("Miktar 1 veya daha büyük olmalı", true);
+
+  try {
+    setLoading(true);
+    await api("saveMovement", payload);
+    showToast("Hareket kaydedildi");
+    clearMovementForm();
+    await loadAll();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Hareket kaydedilemedi", true);
+  } finally {
+    setLoading(false);
+  }
+});
+
+el.clearProductBtn.addEventListener("click", clearProductForm);
+el.clearMovementBtn.addEventListener("click", clearMovementForm);
+el.refreshBtn.addEventListener("click", loadAll);
+el.searchInput.addEventListener("input", applySearch);
+
+el.moveQuantity.addEventListener("input", calculateMovementTotal);
+el.moveUnitPrice.addEventListener("input", calculateMovementTotal);
+
+el.barcode.addEventListener("change", () => {
+  const product = findProductByBarcode(el.barcode.value);
+  if (product && !el.name.value.trim()) {
+    fillProductForm(product);
+  }
+});
+
+el.moveBarcode.addEventListener("change", () => {
+  const product = findProductByBarcode(el.moveBarcode.value);
+  if (product) {
+    el.moveName.value = product.name || "";
+  }
+});
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(console.error);
+  });
+}
+
+clearMovementForm();
+loadAll();
