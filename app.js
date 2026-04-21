@@ -1,4 +1,4 @@
-const API_URL = "BURAYA_APPS_SCRIPT_WEB_APP_URL_YAPISTIR";
+const API_URL = "https://script.google.com/macros/s/AKfycbzI4RbRYqWrMLAoAEGYI9QrgDdRDgycXhDchid64w8RIdxkbT8JKoexCso1C3mdl1tY/exec";
 
 const state = {
   products: [],
