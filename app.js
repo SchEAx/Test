@@ -166,7 +166,7 @@ function renderProducts() {
   if (!state.filteredProducts.length) {
     el.productTableBody.innerHTML = `
       <tr>
-        <td colspan="8" class="empty-cell">Kayıt bulunamadı</td>
+        <td colspan="13" class="empty-cell">Kayıt bulunamadı</td>
       </tr>
     `;
     return;
