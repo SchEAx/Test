@@ -156,18 +156,9 @@ function updateStats() {
 function applySearch() {
   const q = (el.searchInput.value || "").trim().toLowerCase();
 
-  state.filteredProducts = state.products.filter((p) => {
-    const text = [
-      p.barcode,
-      p.name,
-      p.brand,
-      p.category,
-      p.location,
-      p.note,
-    ].join(" ").toLowerCase();
-
-    return text.includes(q);
-  });
+  state.filteredProducts = state.products.filter((p) =>
+    String(p.name || "").toLowerCase().includes(q)
+  );
 
   renderProducts();
 }
@@ -329,7 +320,6 @@ el.productForm.addEventListener("submit", async (e) => {
     note: el.note.value.trim(),
   };
 
-  if (!payload.barcode) return showToast("Barkod zorunlu", true);
   if (!payload.name) return showToast("Ürün adı zorunlu", true);
 
   try {
