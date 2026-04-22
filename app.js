@@ -17,13 +17,18 @@ const el = {
   productForm: document.getElementById("productForm"),
   productId: document.getElementById("productId"),
   barcode: document.getElementById("barcode"),
-  name: document.getElementById("name"),
-  brand: document.getElementById("brand"),
-  category: document.getElementById("category"),
-  stock: document.getElementById("stock"),
-  minStock: document.getElementById("minStock"),
-  location: document.getElementById("location"),
-  note: document.getElementById("note"),
+name: document.getElementById("name"),
+productBrand: document.getElementById("productBrand"),
+category: document.getElementById("category"),
+subCategory: document.getElementById("subCategory"),
+carBrand: document.getElementById("carBrand"),
+carModel: document.getElementById("carModel"),
+carType: document.getElementById("carType"),
+variant: document.getElementById("variant"),
+stock: document.getElementById("stock"),
+minStock: document.getElementById("minStock"),
+location: document.getElementById("location"),
+note: document.getElementById("note"),
   saveProductBtn: document.getElementById("saveProductBtn"),
   clearProductBtn: document.getElementById("clearProductBtn"),
 
@@ -155,9 +160,20 @@ function updateStats() {
 function applySearch() {
   const q = (el.searchInput.value || "").trim().toLowerCase();
 
-  state.filteredProducts = state.products.filter((p) =>
-    String(p.name || "").toLowerCase().includes(q)
-  );
+  state.filteredProducts = state.products.filter((p) => {
+    const text = [
+      p.name,
+      p.productBrand,
+      p.category,
+      p.subCategory,
+      p.carBrand,
+      p.carModel,
+      p.carType,
+      p.variant
+    ].join(" ").toLowerCase();
+
+    return text.includes(q);
+  });
 
   renderProducts();
 }
@@ -173,26 +189,31 @@ function renderProducts() {
   }
 
   el.productTableBody.innerHTML = state.filteredProducts.map((p) => {
-    const isLow = Number(p.stock || 0) <= Number(p.minStock || 0);
+  const isLow = Number(p.stock || 0) <= Number(p.minStock || 0);
 
-    return `
-      <tr>
-        <td>${escapeHtml(p.barcode || "-")}</td>
-        <td>${escapeHtml(p.name || "-")}</td>
-        <td>${escapeHtml(p.brand || "-")}</td>
-        <td>${escapeHtml(p.category || "-")}</td>
-        <td class="${isLow ? "low-stock" : ""}">${Number(p.stock || 0)}</td>
-        <td>${Number(p.minStock || 0)}</td>
-        <td>${escapeHtml(p.location || "-")}</td>
-        <td>
-          <div class="action-group">
-            <button class="action-btn edit" onclick="editProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Düzenle</button>
-            <button class="action-btn delete" onclick="deleteProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Sil</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  return `
+    <tr>
+      <td>${escapeHtml(p.barcode || "-")}</td>
+      <td>${escapeHtml(p.name || "-")}</td>
+      <td>${escapeHtml(p.productBrand || "-")}</td>
+      <td>${escapeHtml(p.category || "-")}</td>
+      <td>${escapeHtml(p.subCategory || "-")}</td>
+      <td>${escapeHtml(p.carBrand || "-")}</td>
+      <td>${escapeHtml(p.carModel || "-")}</td>
+      <td>${escapeHtml(p.carType || "-")}</td>
+      <td>${escapeHtml(p.variant || "-")}</td>
+      <td class="${isLow ? "low-stock" : ""}">${Number(p.stock || 0)}</td>
+      <td>${Number(p.minStock || 0)}</td>
+      <td>${escapeHtml(p.location || "-")}</td>
+      <td>
+        <div class="action-group">
+          <button class="action-btn edit" onclick="editProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Düzenle</button>
+          <button class="action-btn delete" onclick="deleteProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Sil</button>
+        </div>
+      </td>
+    </tr>
+  `;
+}).join("");
 }
 
 function renderMovements() {
@@ -231,8 +252,13 @@ function clearProductForm() {
   el.productId.value = "";
   el.barcode.value = "";
   el.name.value = "";
-  el.brand.value = "";
+  el.productBrand.value = "";
   el.category.value = "";
+  el.subCategory.value = "";
+  el.carBrand.value = "";
+  el.carModel.value = "";
+  el.carType.value = "";
+  el.variant.value = "";
   el.stock.value = "";
   el.minStock.value = "";
   el.location.value = "";
@@ -253,8 +279,13 @@ function fillProductForm(product) {
   el.productId.value = product.id || "";
   el.barcode.value = product.barcode || "";
   el.name.value = product.name || "";
-  el.brand.value = product.brand || "";
+  el.productBrand.value = product.productBrand || "";
   el.category.value = product.category || "";
+  el.subCategory.value = product.subCategory || "";
+  el.carBrand.value = product.carBrand || "";
+  el.carModel.value = product.carModel || "";
+  el.carType.value = product.carType || "";
+  el.variant.value = product.variant || "";
   el.stock.value = product.stock ?? "";
   el.minStock.value = product.minStock ?? "";
   el.location.value = product.location || "";
@@ -304,12 +335,17 @@ function escapeHtml(value) {
 el.productForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
-  const payload = {
+const payload = {
   id: el.productId.value.trim(),
   barcode: el.barcode.value.trim(),
   name: el.name.value.trim(),
-  brand: el.brand.value.trim(),
+  productBrand: el.productBrand.value.trim(),
   category: el.category.value.trim(),
+  subCategory: el.subCategory.value.trim(),
+  carBrand: el.carBrand.value.trim(),
+  carModel: el.carModel.value.trim(),
+  carType: el.carType.value.trim(),
+  variant: el.variant.value.trim(),
   stock: el.stock.value.trim(),
   minStock: el.minStock.value.trim(),
   location: el.location.value.trim(),
