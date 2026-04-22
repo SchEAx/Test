@@ -83,22 +83,31 @@ async function api(action, payload = {}) {
     throw new Error("API_URL henüz tanımlanmadı.");
   }
 
-  const formData = new URLSearchParams();
-  formData.append("action", action);
+  const isReadAction = action === "listProducts" || action === "listMovements";
 
-  Object.entries(payload).forEach(([key, value]) => {
-    formData.append(key, value ?? "");
-  });
+  let res;
 
-async function loadMovements() {
-  const res = await fetch(`${API_URL}?action=listMovements`);
-  const data = await res.json();
+  if (isReadAction) {
+    const query = new URLSearchParams({ action, ...payload }).toString();
+    res = await fetch(`${API_URL}?${query}`, {
+      method: "GET",
+    });
+  } else {
+    const formData = new URLSearchParams();
+    formData.append("action", action);
 
-  if (data.error) throw new Error(data.error);
+    Object.entries(payload).forEach(([key, value]) => {
+      formData.append(key, value ?? "");
+    });
 
-  state.movements = Array.isArray(data) ? data : (data.items || []);
-  renderMovements();
-}
+    res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: formData.toString(),
+    });
+  }
 
   const text = await res.text();
 
