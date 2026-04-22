@@ -32,16 +32,8 @@ note: document.getElementById("note"),
   saveProductBtn: document.getElementById("saveProductBtn"),
   clearProductBtn: document.getElementById("clearProductBtn"),
 
-  movementForm: document.getElementById("movementForm"),
-  moveBarcode: document.getElementById("moveBarcode"),
-  moveName: document.getElementById("moveName"),
-  moveType: document.getElementById("moveType"),
-  moveQuantity: document.getElementById("moveQuantity"),
-  moveUnitPrice: document.getElementById("moveUnitPrice"),
-  moveTotal: document.getElementById("moveTotal"),
-  moveNote: document.getElementById("moveNote"),
-  saveMovementBtn: document.getElementById("saveMovementBtn"),
-  clearMovementBtn: document.getElementById("clearMovementBtn"),
+  movementSearchInput: document.getElementById("movementSearchInput"),
+movementSearchList: document.getElementById("movementSearchList"),
 
   searchInput: document.getElementById("searchInput"),
   productTableBody: document.getElementById("productTableBody"),
@@ -154,11 +146,10 @@ function setLoading(flag) {
   state.loading = flag;
   el.refreshBtn.disabled = flag;
   el.saveProductBtn.disabled = flag;
-  el.saveMovementBtn.disabled = flag;
+  el.movementSearchInput.disabled = flag;
 
   el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile";
   el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet";
-  el.saveMovementBtn.textContent = flag ? "Kaydediliyor..." : "Hareketi Kaydet";
 }
 
 function updateStats() {
@@ -261,6 +252,55 @@ function renderMovements() {
     `;
   }).join("");
 }
+function renderMovementSearchResults() {
+  const q = (el.movementSearchInput.value || "").trim().toLowerCase();
+
+  if (!q) {
+    el.movementSearchList.innerHTML = `<div class="empty-state">Arama yaparak ürün seç</div>`;
+    return;
+  }
+
+  const results = state.products.filter((p) => {
+    const text = [
+      p.name,
+      p.productBrand,
+      p.category,
+      p.subCategory,
+      p.carBrand,
+      p.carModel,
+      p.carType,
+      p.variant,
+      p.barcode
+    ].join(" ").toLowerCase();
+
+    return text.includes(q);
+  });
+
+  if (!results.length) {
+    el.movementSearchList.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
+    return;
+  }
+
+  el.movementSearchList.innerHTML = results.map((p) => `
+    <div class="movement-search-item">
+      <div class="movement-search-info">
+        <strong>${escapeHtml(p.name || "-")}</strong>
+        <div class="muted">${escapeHtml(p.category || "-")} / ${escapeHtml(p.subCategory || "-")}</div>
+        <div class="muted">
+          ${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "-")} ${escapeHtml(p.variant || "")}
+        </div>
+        <div class="muted">
+          Barkod: ${escapeHtml(p.barcode || "-")} | Stok: <strong>${Number(p.stock || 0)}</strong>
+        </div>
+      </div>
+
+      <div class="movement-search-actions">
+        <button class="btn success" onclick="quickStockAction('${String(p.id || "").replace(/'/g, "\\'")}', 'GIRIS')">Giriş</button>
+        <button class="btn danger" onclick="quickStockAction('${String(p.id || "").replace(/'/g, "\\'")}', 'CIKIS')">Çıkış</button>
+      </div>
+    </div>
+  `).join("");
+}
 
 function clearProductForm() {
   el.productId.value = "";
@@ -280,13 +320,8 @@ function clearProductForm() {
 }
 
 function clearMovementForm() {
-  el.moveBarcode.value = "";
-  el.moveName.value = "";
-  el.moveType.value = "GIRIS";
-  el.moveQuantity.value = "1";
-  el.moveUnitPrice.value = "";
-  el.moveTotal.value = formatMoney(0);
-  el.moveNote.value = "";
+  el.movementSearchInput.value = "";
+  el.movementSearchList.innerHTML = `<div class="empty-state">Arama yaparak ürün seç</div>`;
 }
 
 function fillProductForm(product) {
@@ -336,7 +371,55 @@ window.deleteProduct = async function(id) {
     setLoading(false);
   }
 };
+window.quickStockAction = async function(id, type) {
+  const product = state.products.find((p) => String(p.id) === String(id));
 
+  if (!product) {
+    showToast("Ürün bulunamadı", true);
+    return;
+  }
+
+  const qtyText = prompt(
+    `${product.name} için ${type === "GIRIS" ? "giriş" : "çıkış"} miktarı gir:`,
+    "1"
+  );
+
+  if (qtyText === null) return;
+
+  const quantity = Number(qtyText);
+  if (!quantity || quantity <= 0) {
+    showToast("Geçerli bir miktar gir", true);
+    return;
+  }
+
+  const ok = confirm(
+    `${product.name} için ${quantity} adet ${type === "GIRIS" ? "giriş" : "çıkış"} yapılsın mı?`
+  );
+
+  if (!ok) return;
+
+  try {
+    setLoading(true);
+
+    await api("saveMovement", {
+      barcode: product.barcode || "",
+      name: product.name || "",
+      type,
+      quantity,
+      unitPrice: 0,
+      note: `Hızlı ${type === "GIRIS" ? "giriş" : "çıkış"}`
+    });
+
+    showToast(`${product.name} için hareket kaydedildi`);
+    await loadAll();
+    renderMovementSearchResults();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Hareket kaydedilemedi", true);
+  } finally {
+    setLoading(false);
+  }
+};
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -382,49 +465,12 @@ const payload = {
   }
 });
 
-el.movementForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  const payload = {
-    barcode: el.moveBarcode.value.trim(),
-    name: el.moveName.value.trim(),
-    type: el.moveType.value,
-    quantity: el.moveQuantity.value.trim(),
-    unitPrice: el.moveUnitPrice.value.trim(),
-    note: el.moveNote.value.trim(),
-  };
-
-  if (!payload.name) return showToast("Ürün adı zorunlu", true);
-  if (!payload.quantity || Number(payload.quantity) <= 0) return showToast("Miktar 1 veya daha büyük olmalı", true);
-
-  try {
-    setLoading(true);
-    await api("saveMovement", payload);
-    showToast("Hareket kaydedildi");
-    clearMovementForm();
-    await loadAll();
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || "Hareket kaydedilemedi", true);
-  } finally {
-    setLoading(false);
-  }
-});
 
 el.clearProductBtn.addEventListener("click", clearProductForm);
-el.clearMovementBtn.addEventListener("click", clearMovementForm);
+
 el.refreshBtn.addEventListener("click", loadAll);
 el.searchInput.addEventListener("input", applySearch);
-
-el.moveQuantity.addEventListener("input", calculateMovementTotal);
-el.moveUnitPrice.addEventListener("input", calculateMovementTotal);
-
-el.barcode.addEventListener("change", () => {
-  const product = findProductByBarcode(el.barcode.value);
-  if (product && !el.name.value.trim()) {
-    fillProductForm(product);
-  }
-});
+el.movementSearchInput.addEventListener("input", renderMovementSearchResults);
 
 el.moveBarcode.addEventListener("change", () => {
   const product = findProductByBarcode(el.moveBarcode.value);
