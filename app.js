@@ -90,10 +90,15 @@ async function api(action, payload = {}) {
     formData.append(key, value ?? "");
   });
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    body: formData,
-  });
+async function loadMovements() {
+  const res = await fetch(`${API_URL}?action=listMovements`);
+  const data = await res.json();
+
+  if (data.error) throw new Error(data.error);
+
+  state.movements = Array.isArray(data) ? data : (data.items || []);
+  renderMovements();
+}
 
   const text = await res.text();
 
