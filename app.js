@@ -20,7 +20,6 @@ const el = {
   name: document.getElementById("name"),
   brand: document.getElementById("brand"),
   category: document.getElementById("category"),
-  unit: document.getElementById("unit"),
   stock: document.getElementById("stock"),
   minStock: document.getElementById("minStock"),
   location: document.getElementById("location"),
@@ -182,7 +181,7 @@ function renderProducts() {
         <td>${escapeHtml(p.name || "-")}</td>
         <td>${escapeHtml(p.brand || "-")}</td>
         <td>${escapeHtml(p.category || "-")}</td>
-        <td class="${isLow ? "low-stock" : ""}">${Number(p.stock || 0)} ${escapeHtml(p.unit || "")}</td>
+        <td class="${isLow ? "low-stock" : ""}">${Number(p.stock || 0)}</td>
         <td>${Number(p.minStock || 0)}</td>
         <td>${escapeHtml(p.location || "-")}</td>
         <td>
@@ -234,7 +233,6 @@ function clearProductForm() {
   el.name.value = "";
   el.brand.value = "";
   el.category.value = "";
-  el.unit.value = "Adet";
   el.stock.value = "";
   el.minStock.value = "";
   el.location.value = "";
@@ -257,7 +255,6 @@ function fillProductForm(product) {
   el.name.value = product.name || "";
   el.brand.value = product.brand || "";
   el.category.value = product.category || "";
-  el.unit.value = product.unit || "Adet";
   el.stock.value = product.stock ?? "";
   el.minStock.value = product.minStock ?? "";
   el.location.value = product.location || "";
@@ -308,17 +305,16 @@ el.productForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const payload = {
-    id: el.productId.value.trim(),
-    barcode: el.barcode.value.trim(),
-    name: el.name.value.trim(),
-    brand: el.brand.value.trim(),
-    category: el.category.value.trim(),
-    unit: el.unit.value.trim(),
-    stock: el.stock.value.trim(),
-    minStock: el.minStock.value.trim(),
-    location: el.location.value.trim(),
-    note: el.note.value.trim(),
-  };
+  id: el.productId.value.trim(),
+  barcode: el.barcode.value.trim(),
+  name: el.name.value.trim(),
+  brand: el.brand.value.trim(),
+  category: el.category.value.trim(),
+  stock: el.stock.value.trim(),
+  minStock: el.minStock.value.trim(),
+  location: el.location.value.trim(),
+  note: el.note.value.trim(),
+};
 
   if (!payload.name) return showToast("Ürün adı zorunlu", true);
 
@@ -348,7 +344,6 @@ el.movementForm.addEventListener("submit", async (e) => {
     note: el.moveNote.value.trim(),
   };
 
-  if (!payload.barcode) return showToast("Hareket için barkod zorunlu", true);
   if (!payload.name) return showToast("Ürün adı zorunlu", true);
   if (!payload.quantity || Number(payload.quantity) <= 0) return showToast("Miktar 1 veya daha büyük olmalı", true);
 
