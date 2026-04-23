@@ -35,7 +35,7 @@
         <strong id="criticalStockCount">0</strong>
       </div>
     </section>
-
+<div id="page-add" class="page hidden">
     <section class="grid-2">
       <div class="card">
         <h2>Ürün Kartı</h2>
@@ -130,7 +130,7 @@
         </form>
       </div>
     </section>
-
+<div id="page-search" class="page">
     <section class="card">
       <div class="section-head">
         <div>
@@ -167,7 +167,9 @@
         </table>
       </div>
     </section>
-
+  </div>
+</div>
+  <div id="page-movements" class="page hidden">
     <section class="card">
       <div class="section-head">
         <div>
@@ -181,9 +183,14 @@
       </div>
     </section>
   </div>
+  </div>
 
   <div id="toast" class="toast hidden"></div>
-
+<div class="bottom-nav">
+  <button onclick="switchTab('search')">Ara</button>
+  <button onclick="switchTab('add')">Ürün Ekle</button>
+  <button onclick="switchTab('movements')">Hareketler</button>
+</div>
   <script src="app.js"></script>
 </body>
 </html>
