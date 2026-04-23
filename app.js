@@ -484,6 +484,14 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(console.error);
   });
 }
+function switchTab(tab) {
+  document.getElementById("page-search").classList.add("hidden");
+  document.getElementById("page-add").classList.add("hidden");
+  document.getElementById("page-movements").classList.add("hidden");
+
+  document.getElementById("page-" + tab).classList.remove("hidden");
+}
+
 
 clearMovementForm();
 loadAll();
