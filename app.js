@@ -32,6 +32,18 @@ function toProductRow(payload) {
   return { barcode: payload.barcode || null, product_name: productName || payload.category, product_brand: payload.productBrand || null, category: payload.category || null, vehicle_brand: payload.carBrand || null, vehicle_model: payload.carModel || null, vehicle_type: payload.carType || null, vehicle_year: payload.vehicleYear || null, quantity: Number(payload.stock || 0), min_stock: Number(payload.minStock || 0), location: payload.location || null, note: payload.note || null };
 }
 function formatRequestStatus(status) { return ({ bekliyor: "Bekliyor", rezerve_edildi: "Rezerve", teslim_edildi: "Teslim Edildi", montaj_bitti: "Tamamlandı", iptal: "İptal" })[status] || status || "-"; }
+function requestVehicleText(req) {
+  return [req?.vehicle_brand, req?.vehicle_model, req?.vehicle_type, req?.vehicle_year].filter(Boolean).join(" ");
+}
+
+function renderSelectedRequestDetail(req) {
+  const vehicleText = requestVehicleText(req);
+  el.requestedTextBox.innerHTML = `
+    <div style="font-weight:700;color:#fff;">${escapeHtml(req?.requested_text || "-")}</div>
+    <div class="muted">${escapeHtml(vehicleText || "Araç bilgisi yok")}</div>
+  `;
+}
+
 function setLoading(flag) { state.loading = flag; el.refreshBtn.disabled = flag; el.saveProductBtn.disabled = flag; el.movementSearchInput.disabled = flag; el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile"; el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet"; }
 
 async function loadProducts() { const { data, error } = await supabaseClient.from("stock_products").select("*").order("product_name", { ascending: true }); if (error) throw error; state.products = (data || []).map(mapProduct); applySearch(); updateStats(); }
@@ -81,17 +93,23 @@ window.quickStockAction = async function(id, type) {
   if (!confirm(`${product.category || product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
   try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}` }); if (movementError) throw movementError; showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
 };
-window.openReservationPanel = function(requestId) { const req = state.stockRequests.find((r) => String(r.id) === String(requestId)); if (!req) return showToast("Talep bulunamadı", true); state.selectedStockRequestId = requestId; el.reservationPanel.classList.remove("hidden"); const vehicleText = [
-  req.vehicle_brand,
-  req.vehicle_model,
-  req.vehicle_type,
-  req.vehicle_year
-].filter(Boolean).join(" ");
+window.openReservationPanel = function(requestId) {
+  const req = state.stockRequests.find((r) => String(r.id) === String(requestId));
+  if (!req) return showToast("Talep bulunamadı", true);
 
-el.requestedTextBox.innerHTML = `
-  <div style="font-weight:600;">${escapeHtml(req.requested_text || "-")}</div>
-  <div class="muted">${escapeHtml(vehicleText || "-")}</div>
-`; el.productSearchInput.value = req.requested_text || ""; searchProductsForRequest(el.productSearchInput.value); };
+  state.selectedStockRequestId = requestId;
+  el.reservationPanel.classList.remove("hidden");
+
+  renderSelectedRequestDetail(req);
+
+  const vehicleText = requestVehicleText(req);
+  const searchText = [req.requested_text, req.vehicle_brand, req.vehicle_model, req.vehicle_type, req.vehicle_year]
+    .filter(Boolean)
+    .join(" ");
+
+  el.productSearchInput.value = searchText || req.requested_text || "";
+  searchProductsForRequest(el.productSearchInput.value);
+};
 async function searchProductsForRequest(query = "") {
   const q = String(query || "").trim().toLowerCase();
 
@@ -107,6 +125,7 @@ async function searchProductsForRequest(query = "") {
   const reqBrand = String(selectedReq?.vehicle_brand || "").trim().toLowerCase();
   const reqModel = String(selectedReq?.vehicle_model || "").trim().toLowerCase();
   const reqType = String(selectedReq?.vehicle_type || "").trim().toLowerCase();
+  const reqYear = String(selectedReq?.vehicle_year || "").trim().toLowerCase();
 
   const words = q
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
@@ -138,6 +157,11 @@ async function searchProductsForRequest(query = "") {
       // Araç tipi eşleşirse ekstra puan
       if (reqType && String(p.carType || "").toLowerCase().includes(reqType)) {
         score += 8;
+      }
+
+      // Model yılı eşleşirse ekstra puan
+      if (reqYear && String(p.vehicleYear || "").toLowerCase().includes(reqYear)) {
+        score += 6;
       }
 
       return { p, score };
@@ -183,7 +207,7 @@ async function searchProductsForRequest(query = "") {
 }
 window.reserveProductForRequest = async function(productId) {
   if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true); const quantity = Number(document.getElementById("qty_" + productId)?.value || 1); if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
-  try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); el.requestedTextBox.textContent = stillSelected.requested_text || "-"; searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
+  try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); renderSelectedRequestDetail(stillSelected); searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
 };
 window.cancelReservation = async function(requestId) { if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.rpc("cancel_stock_reservation", { p_request_id: requestId }); if (error) throw error; showToast("Rezerv iptal edildi ✅"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Rezerv iptal edilemedi", true); } finally { setLoading(false); } };
 function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "movements"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") loadStockRequests(); }
