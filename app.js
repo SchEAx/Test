@@ -264,32 +264,82 @@ function renderMovementSearchResults() {
       </div>`;
   }).join("");
 }
+function formatRequestStatus(status) {
+  const map = {
+    bekliyor: "Bekliyor",
+    rezerve_edildi: "Rezerve",
+    teslim_edildi: "Teslim Edildi",
+    montaj_bitti: "Tamamlandı",
+    iptal: "İptal"
+  };
 
+  return map[status] || status || "-";
+}
 function renderStockRequests() {
-  if (!state.stockRequests.length) {
-    el.stockRequestsBox.innerHTML = `<div class="empty-state">Bekleyen depo talebi yok</div>`;
-    return;
-  }
   let list = state.stockRequests || [];
 
-if (state.requestFilter !== "all") {
-  list = list.filter(req => req.status === state.requestFilter);
-}
-  if (!list.length) {
-  el.stockRequestsBox.innerHTML = `<div class="empty-state">Bu filtrede talep yok</div>`;
-  return;
-}
+  if (state.requestFilter !== "all") {
+    list = list.filter(req => req.status === state.requestFilter);
+  }
 
-el.stockRequestsBox.innerHTML = list.map((req) => `
+  if (!list.length) {
+    el.stockRequestsBox.innerHTML = `<div class="empty-state">Bu filtrede talep yok</div>`;
+    return;
+  }
+
+  el.stockRequestsBox.innerHTML = list.map((req) => `
     <div class="movement-item">
-      <div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge ${req.status === "bekliyor" ? "cikis" : "giris"}">${escapeHtml(req.status)}</span></div>
+      <div class="movement-top">
+        <div>
+          <strong>${escapeHtml(req.plate || "Plaka yok")}</strong>
+          <div class="muted">${escapeHtml(req.customer_name || "-")}</div>
+        </div>
+
+        <span class="badge status-${escapeHtml(req.status || "bos")}">
+          ${formatRequestStatus(req.status)}
+        </span>
+      </div>
+
       <div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div>
       <div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div>
       <div>Tarih: <strong>${formatDate(req.created_at)}</strong></div>
-      <div class="row-gap" style="margin-top:10px;"><button class="btn primary" onclick="openReservationPanel('${req.id}')">Ürün Eşleştir</button></div>
-    </div>`).join("");
-}
 
+      <div class="row-gap" style="margin-top:10px;">
+        <button class="btn primary" onclick="openReservationPanel('${req.id}')">
+          Ürün Eşleştir
+        </button>
+
+        ${req.status === "rezerve_edildi" ? `
+          <button class="btn danger" onclick="cancelReservation('${req.id}')">
+            Rezervi İptal Et
+          </button>
+        ` : ""}
+      </div>
+    </div>
+  `).join("");
+}
+window.cancelReservation = async function(requestId) {
+  if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return;
+
+  try {
+    setLoading(true);
+
+    const { data, error } = await supabaseClient.rpc("cancel_stock_reservation", {
+      p_request_id: requestId
+    });
+
+    if (error) throw error;
+
+    showToast("Rezerv iptal edildi ✅");
+    await loadAll();
+
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Rezerv iptal edilemedi", true);
+  } finally {
+    setLoading(false);
+  }
+};
 function clearProductForm() {
   [el.productId, el.barcode, el.name, el.productBrand, el.category, el.subCategory, el.carBrand, el.carModel, el.carType, el.variant, el.stock, el.minStock, el.location, el.note].forEach((x) => x.value = "");
 }
@@ -380,7 +430,28 @@ async function searchProductsForRequest(query = "") {
     el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`;
     return;
   }
-  const results = state.products.filter((p) => productSearchText(p).includes(q)).slice(0, 25);
+  const words = q
+  .replace(/[^\p{L}\p{N}\s]/gu, " ")
+  .split(/\s+/)
+  .filter(w => w.length >= 2);
+
+const results = state.products
+  .map((p) => {
+    const text = productSearchText(p);
+    let score = 0;
+
+    words.forEach(w => {
+      if (text.includes(w)) score += 1;
+    });
+
+    if (text.includes(q)) score += 5;
+
+    return { p, score };
+  })
+  .filter(x => x.score > 0)
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 25)
+  .map(x => x.p);
   if (!results.length) {
     el.productMatchBox.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
     return;
@@ -409,9 +480,17 @@ window.reserveProductForRequest = async function(productId) {
 });
     if (error) throw error;
     showToast("Stok rezerve edildi ✅");
-    state.selectedStockRequestId = null;
-    el.reservationPanel.classList.add("hidden");
-    await loadAll();
+  await loadAll();
+
+const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId));
+
+if (stillSelected) {
+  el.reservationPanel.classList.remove("hidden");
+  el.requestedTextBox.textContent = stillSelected.requested_text || "-";
+  searchProductsForRequest(el.productSearchInput.value);
+}
+
+showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin.");
   } catch (err) {
     console.error(err);
     showToast(err.message || "Rezerve edilemedi", true);
