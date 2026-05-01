@@ -385,15 +385,14 @@ window.reserveProductForRequest = async function(productId) {
   if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true);
   const quantity = Number(document.getElementById("qty_" + productId)?.value || 1);
   if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
-  const deliveredTo = prompt("Ürün kime teslim edildi? Örn: Mehmet Usta", "");
   try {
     setLoading(true);
-    const { error } = await supabaseClient.rpc("reserve_stock_for_request", {
-      p_request_id: state.selectedStockRequestId,
-      p_product_id: productId,
-      p_quantity: quantity,
-      p_delivered_to: deliveredTo || ""
-    });
+    const { data, error } = await supabaseClient.rpc("reserve_stock_for_request", {
+  p_request_id: selectedStockRequestId,
+  p_product_id: productId,
+  p_quantity: quantity,
+  p_delivered_to: ""
+});
     if (error) throw error;
     showToast("Stok rezerve edildi ✅");
     state.selectedStockRequestId = null;
