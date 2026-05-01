@@ -105,69 +105,74 @@ window.openReservationPanel = function(requestId) {
 el.productSearchInput.value = req.requested_text || "";
 searchProductsForRequest(req.requested_text || "", true);
 };
+
+function softText(value) {
+  return String(value || "")
+    .toLocaleLowerCase("tr-TR")
+    .replaceAll("ı", "i")
+    .replaceAll("ğ", "g")
+    .replaceAll("ü", "u")
+    .replaceAll("ş", "s")
+    .replaceAll("ö", "o")
+    .replaceAll("ç", "c")
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 async function searchProductsForRequest(query = "", autoSuggest = false) {
-  const q = String(query || "").trim().toLowerCase();
-
-    const autoText = [
-    selectedReq?.requested_text,
-    selectedReq?.vehicle_brand,
-    selectedReq?.vehicle_model,
-    selectedReq?.vehicle_type,
-    selectedReq?.vehicle_year
-  ].filter(Boolean).join(" ");
-
-  const searchSource = autoSuggest ? autoText : q;
-
-  if (!searchSource.trim()) {
-    el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`;
-    return;
-  }
-
   const selectedReq = state.stockRequests.find(
     r => String(r.id) === String(state.selectedStockRequestId)
   );
 
-  const reqBrand = String(selectedReq?.vehicle_brand || "").trim().toLowerCase();
-  const reqModel = String(selectedReq?.vehicle_model || "").trim().toLowerCase();
-  const reqType = String(selectedReq?.vehicle_type || "").trim().toLowerCase();
-  const reqYear = String(selectedReq?.vehicle_year || "").trim().toLowerCase();
+  const q = softText(query);
 
- const words = searchSource
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+  const reqBrand = softText(selectedReq?.vehicle_brand);
+  const reqModel = softText(selectedReq?.vehicle_model);
+  const reqType = softText(selectedReq?.vehicle_type);
+  const reqYear = softText(selectedReq?.vehicle_year);
+  const reqText = softText(selectedReq?.requested_text);
+
+  const searchSource = autoSuggest
+    ? softText([reqText, reqBrand, reqModel, reqType, reqYear].filter(Boolean).join(" "))
+    : q;
+
+  if (!searchSource) {
+    el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`;
+    return;
+  }
+
+  const words = searchSource
     .split(/\s+/)
-    .filter(w => w.length >= 2);
+    .filter(w => w.length >= 2)
+    .map(w => w.replace(/ligi$|ligi$|lik$|ligi$|ligi$/g, ""));
 
   const results = state.products
     .map((p) => {
-      const text = productSearchText(p);
+      const text = softText([
+        p.name,
+        p.productBrand,
+        p.category,
+        p.carBrand,
+        p.carModel,
+        p.carType,
+        p.vehicleYear,
+        p.location,
+        p.note
+      ].join(" "));
+
       let score = 0;
 
-      // Sipariş metni eşleşmesi
       words.forEach(w => {
         if (text.includes(w)) score += 2;
       });
 
-     if (q && text.includes(q)) score += 8;
+      if (q && text.includes(q)) score += 8;
 
-      // Araç markası eşleşmesi çok önemli
-      if (reqBrand && String(p.carBrand || "").toLowerCase().includes(reqBrand)) {
-        score += 20;
-      }
-
-      // Araç modeli eşleşirse daha da yukarı
-      if (reqModel && String(p.carModel || "").toLowerCase().includes(reqModel)) {
-        score += 15;
-      }
-
-      // Araç tipi eşleşirse ekstra puan
-      if (reqType && String(p.carType || "").toLowerCase().includes(reqType)) {
-        score += 8;
-      }
-
-      // Model yılı eşleşirse ekstra puan
-      if (reqYear && String(p.vehicleYear || "").toLowerCase().includes(reqYear)) {
-        score += 6;
-      }
+      if (reqBrand && softText(p.carBrand).includes(reqBrand)) score += 30;
+      if (reqModel && softText(p.carModel).includes(reqModel)) score += 25;
+      if (reqType && softText(p.carType).includes(reqType)) score += 15;
+      if (reqYear && softText(p.vehicleYear).includes(reqYear)) score += 6;
 
       return { p, score };
     })
@@ -187,34 +192,36 @@ async function searchProductsForRequest(query = "", autoSuggest = false) {
     return `
       <div class="movement-search-item">
         <div class="movement-search-info">
-          <strong>${escapeHtml(p.name || p.category || "-")}</strong>
+          <strong>${escapeHtml(p.category || p.name || "-")}</strong>
           <div class="muted">
-            ${escapeHtml(p.productBrand || "-")} / 
-            ${escapeHtml(p.carBrand || "-")} 
-            ${escapeHtml(p.carModel || "-")} 
-            ${escapeHtml(p.carType || "-")} 
-          ${escapeHtml(p.vehicleYear || "")}
+            ${escapeHtml(p.productBrand || "-")} /
+            ${escapeHtml(p.carBrand || "-")}
+            ${escapeHtml(p.carModel || "-")}
+            ${escapeHtml(p.carType || "-")}
+            ${escapeHtml(p.vehicleYear || "")}
           </div>
           <div class="muted">
             Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir:
-<strong class="${available <= 0 ? "stock-warning" : ""}">${available}</strong>
+            <strong class="${available <= 0 ? "stock-warning" : ""}">${available}</strong>
           </div>
         </div>
 
         <div class="movement-search-actions">
           <input id="qty_${p.id}" type="number" value="1" min="1" style="max-width:90px" />
-         <button
-  class="btn primary"
-  onclick="reserveProductForRequest('${p.id}')"
-  ${available <= 0 ? "disabled" : ""}
->
-  ${available <= 0 ? "Stok Yok" : "Rezerve Et"}
-</button>
+          <button
+            class="btn primary"
+            onclick="reserveProductForRequest('${p.id}')"
+            ${available <= 0 ? "disabled" : ""}
+          >
+            ${available <= 0 ? "Stok Yok" : "Rezerve Et"}
+          </button>
         </div>
       </div>
     `;
   }).join("");
 }
+
+
 window.reserveProductForRequest = async function(productId) {
   if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true); const quantity = Number(document.getElementById("qty_" + productId)?.value || 1); if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
   try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); renderSelectedRequestDetail(stillSelected); searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
