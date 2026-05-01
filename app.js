@@ -62,7 +62,11 @@ function renderMovementSearchResults() {
 function renderStockRequests() {
   let list = state.stockRequests || []; if (state.requestFilter !== "all") list = list.filter(req => req.status === state.requestFilter);
   if (!list.length) { el.stockRequestsBox.innerHTML = `<div class="empty-state">Bu filtrede talep yok</div>`; return; }
-  el.stockRequestsBox.innerHTML = list.map((req) => `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge status-${escapeHtml(req.status || "bos")}">${formatRequestStatus(req.status)}</span></div><div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div><div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div><div>Tarih: <strong>${formatDate(req.created_at)}</strong></div><div class="row-gap" style="margin-top:10px;"><button class="btn primary" onclick="openReservationPanel('${req.id}')">Ürün Eşleştir</button>${req.status === "rezerve_edildi" ? `<button class="btn danger" onclick="cancelReservation('${req.id}')">Rezervi İptal Et</button>` : ""}</div></div>`).join("");
+  el.stockRequestsBox.innerHTML = list.map((req) => `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge status-${escapeHtml(req.status || "bos")}">${formatRequestStatus(req.status)}</span></div><div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div><div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div><div>Araç: <strong>${escapeHtml([
+  req.vehicle_brand,
+  req.vehicle_model,
+  req.vehicle_type
+].filter(Boolean).join(" ") || "-")}</strong></div><div>Tarih: <strong>${formatDate(req.created_at)}</strong></div><div class="row-gap" style="margin-top:10px;"><button class="btn primary" onclick="openReservationPanel('${req.id}')">Ürün Eşleştir</button>${req.status === "rezerve_edildi" ? `<button class="btn danger" onclick="cancelReservation('${req.id}')">Rezervi İptal Et</button>` : ""}</div></div>`).join("");
 }
 window.setRequestFilter = function(status) { state.requestFilter = status; renderStockRequests(); };
 function clearProductForm() { [el.productId, el.barcode, el.productBrand, el.category, el.carBrand, el.carModel, el.carType, el.vehicleYear, el.stock, el.minStock, el.location, el.note].forEach((x) => x.value = ""); }
@@ -79,11 +83,93 @@ window.quickStockAction = async function(id, type) {
 };
 window.openReservationPanel = function(requestId) { const req = state.stockRequests.find((r) => String(r.id) === String(requestId)); if (!req) return showToast("Talep bulunamadı", true); state.selectedStockRequestId = requestId; el.reservationPanel.classList.remove("hidden"); el.requestedTextBox.textContent = req.requested_text || "-"; el.productSearchInput.value = req.requested_text || ""; searchProductsForRequest(el.productSearchInput.value); };
 async function searchProductsForRequest(query = "") {
-  const q = normalizeText(query); if (!q) { el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`; return; }
-  const words = q.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(w => w.length >= 2);
-  const results = state.products.map((p) => { const text = productSearchText(p); let score = 0; words.forEach(w => { if (text.includes(w)) score += 1; }); if (text.includes(q)) score += 5; return { p, score }; }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 25).map(x => x.p);
-  if (!results.length) { el.productMatchBox.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`; return; }
-  el.productMatchBox.innerHTML = results.map((p) => { const available = Number(p.stock || 0) - Number(p.reserved || 0); return `<div class="movement-search-item"><div class="movement-search-info"><strong>${escapeHtml(p.category || p.name || "-")}</strong><div class="muted">${escapeHtml(p.productBrand || "-")} / ${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "")} ${escapeHtml(p.vehicleYear || "")}</div><div class="muted">Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir: <strong>${available}</strong></div></div><div class="movement-search-actions"><input id="qty_${p.id}" type="number" value="1" min="1" style="max-width:90px" /><button class="btn primary" onclick="reserveProductForRequest('${p.id}')">Rezerve Et</button></div></div>`; }).join("");
+  const q = String(query || "").trim().toLowerCase();
+
+  if (!q) {
+    el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`;
+    return;
+  }
+
+  const selectedReq = state.stockRequests.find(
+    r => String(r.id) === String(state.selectedStockRequestId)
+  );
+
+  const reqBrand = String(selectedReq?.vehicle_brand || "").trim().toLowerCase();
+  const reqModel = String(selectedReq?.vehicle_model || "").trim().toLowerCase();
+  const reqType = String(selectedReq?.vehicle_type || "").trim().toLowerCase();
+
+  const words = q
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= 2);
+
+  const results = state.products
+    .map((p) => {
+      const text = productSearchText(p);
+      let score = 0;
+
+      // Sipariş metni eşleşmesi
+      words.forEach(w => {
+        if (text.includes(w)) score += 2;
+      });
+
+      if (text.includes(q)) score += 8;
+
+      // Araç markası eşleşmesi çok önemli
+      if (reqBrand && String(p.carBrand || "").toLowerCase().includes(reqBrand)) {
+        score += 20;
+      }
+
+      // Araç modeli eşleşirse daha da yukarı
+      if (reqModel && String(p.carModel || "").toLowerCase().includes(reqModel)) {
+        score += 15;
+      }
+
+      // Araç tipi eşleşirse ekstra puan
+      if (reqType && String(p.carType || "").toLowerCase().includes(reqType)) {
+        score += 8;
+      }
+
+      return { p, score };
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 25)
+    .map(x => x.p);
+
+  if (!results.length) {
+    el.productMatchBox.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
+    return;
+  }
+
+  el.productMatchBox.innerHTML = results.map((p) => {
+    const available = Number(p.stock || 0) - Number(p.reserved || 0);
+
+    return `
+      <div class="movement-search-item">
+        <div class="movement-search-info">
+          <strong>${escapeHtml(p.name || p.category || "-")}</strong>
+          <div class="muted">
+            ${escapeHtml(p.productBrand || "-")} / 
+            ${escapeHtml(p.carBrand || "-")} 
+            ${escapeHtml(p.carModel || "-")} 
+            ${escapeHtml(p.carType || "-")} 
+            ${escapeHtml(p.modelYear || "")}
+          </div>
+          <div class="muted">
+            Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir: <strong>${available}</strong>
+          </div>
+        </div>
+
+        <div class="movement-search-actions">
+          <input id="qty_${p.id}" type="number" value="1" min="1" style="max-width:90px" />
+          <button class="btn primary" onclick="reserveProductForRequest('${p.id}')">
+            Rezerve Et
+          </button>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 window.reserveProductForRequest = async function(productId) {
   if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true); const quantity = Number(document.getElementById("qty_" + productId)?.value || 1); if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
