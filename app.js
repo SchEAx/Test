@@ -81,7 +81,17 @@ window.quickStockAction = async function(id, type) {
   if (!confirm(`${product.category || product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
   try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}` }); if (movementError) throw movementError; showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
 };
-window.openReservationPanel = function(requestId) { const req = state.stockRequests.find((r) => String(r.id) === String(requestId)); if (!req) return showToast("Talep bulunamadı", true); state.selectedStockRequestId = requestId; el.reservationPanel.classList.remove("hidden"); el.requestedTextBox.textContent = req.requested_text || "-"; el.productSearchInput.value = req.requested_text || ""; searchProductsForRequest(el.productSearchInput.value); };
+window.openReservationPanel = function(requestId) { const req = state.stockRequests.find((r) => String(r.id) === String(requestId)); if (!req) return showToast("Talep bulunamadı", true); state.selectedStockRequestId = requestId; el.reservationPanel.classList.remove("hidden"); const vehicleText = [
+  req.vehicle_brand,
+  req.vehicle_model,
+  req.vehicle_type,
+  req.vehicle_year
+].filter(Boolean).join(" ");
+
+el.requestedTextBox.innerHTML = `
+  <div style="font-weight:600;">${escapeHtml(req.requested_text || "-")}</div>
+  <div class="muted">${escapeHtml(vehicleText || "-")}</div>
+`; el.productSearchInput.value = req.requested_text || ""; searchProductsForRequest(el.productSearchInput.value); };
 async function searchProductsForRequest(query = "") {
   const q = String(query || "").trim().toLowerCase();
 
