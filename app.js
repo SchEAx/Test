@@ -108,11 +108,7 @@ searchProductsForRequest(req.requested_text || "", true);
 async function searchProductsForRequest(query = "", autoSuggest = false) {
   const q = String(query || "").trim().toLowerCase();
 
-  const selectedReq = state.stockRequests.find(
-    r => String(r.id) === String(state.selectedStockRequestId)
-  );
-
-  const autoText = [
+    const autoText = [
     selectedReq?.requested_text,
     selectedReq?.vehicle_brand,
     selectedReq?.vehicle_model,
@@ -197,7 +193,7 @@ async function searchProductsForRequest(query = "", autoSuggest = false) {
             ${escapeHtml(p.carBrand || "-")} 
             ${escapeHtml(p.carModel || "-")} 
             ${escapeHtml(p.carType || "-")} 
-            ${escapeHtml(p.modelYear || "")}
+          ${escapeHtml(p.vehicleYear || "")}
           </div>
           <div class="muted">
             Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir:
