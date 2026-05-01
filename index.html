@@ -85,6 +85,12 @@
       <section class="grid-2">
         <div class="card">
           <div class="section-head"><div><h2>Depo Talepleri</h2><p class="muted">Araç kabulden gelen bekleyen / rezerve talepler</p></div><button class="btn secondary" onclick="loadStockRequests()">Talepleri Yenile</button></div>
+          <div class="request-filter-row">
+  <button class="btn secondary" onclick="setRequestFilter('all')">Tümü</button>
+  <button class="btn secondary" onclick="setRequestFilter('bekliyor')">Bekliyor</button>
+  <button class="btn secondary" onclick="setRequestFilter('rezerve_edildi')">Rezerve</button>
+  <button class="btn secondary" onclick="setRequestFilter('montaj_bitti')">Tamamlandı</button>
+</div>
           <div id="stockRequestsBox" class="movement-list"><div class="empty-state">Talep bekleniyor...</div></div>
         </div>
 
