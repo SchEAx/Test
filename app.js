@@ -7,6 +7,7 @@ const state = {
   filteredProducts: [],
   movements: [],
   stockRequests: [],
+  requestFilter: "all",
   loading: false,
   selectedStockRequestId: null,
 };
@@ -90,7 +91,10 @@ function mapProduct(row) {
     createdAt: row.created_at || "",
   };
 }
-
+window.setRequestFilter = function(status) {
+  state.requestFilter = status;
+  renderStockRequests();
+};
 function toProductRow(payload) {
   return {
     barcode: payload.barcode || null,
@@ -266,6 +270,11 @@ function renderStockRequests() {
     el.stockRequestsBox.innerHTML = `<div class="empty-state">Bekleyen depo talebi yok</div>`;
     return;
   }
+  let list = state.stockRequests || [];
+
+if (state.requestFilter !== "all") {
+  list = list.filter(req => req.status === state.requestFilter);
+}
   el.stockRequestsBox.innerHTML = state.stockRequests.map((req) => `
     <div class="movement-item">
       <div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge ${req.status === "bekliyor" ? "cikis" : "giris"}">${escapeHtml(req.status)}</span></div>
