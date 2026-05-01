@@ -402,7 +402,7 @@ window.reserveProductForRequest = async function(productId) {
   try {
     setLoading(true);
     const { data, error } = await supabaseClient.rpc("reserve_stock_for_request", {
-  p_request_id: selectedStockRequestId,
+ p_request_id: state.selectedStockRequestId,
   p_product_id: productId,
   p_quantity: quantity,
   p_delivered_to: ""
