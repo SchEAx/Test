@@ -409,7 +409,30 @@ th, td {
   width: auto;
   padding: 10px 14px;
 }
+.badge.status-bekliyor {
+  background: rgba(245, 158, 11, 0.22);
+  color: #fcd34d;
+}
 
+.badge.status-rezerve_edildi {
+  background: rgba(37, 99, 235, 0.22);
+  color: #93c5fd;
+}
+
+.badge.status-teslim_edildi {
+  background: rgba(168, 85, 247, 0.22);
+  color: #d8b4fe;
+}
+
+.badge.status-montaj_bitti {
+  background: rgba(22, 163, 74, 0.22);
+  color: #86efac;
+}
+
+.badge.status-iptal {
+  background: rgba(220, 38, 38, 0.22);
+  color: #fca5a5;
+}
 .stats-grid-4 { grid-template-columns: repeat(4, 1fr); }
 .bottom-nav-4 { grid-template-columns: repeat(4, 1fr); }
 .request-detail { border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03); border-radius: 14px; padding: 12px; margin-bottom: 14px; }
