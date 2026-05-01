@@ -148,7 +148,7 @@ async function loadStockRequests() {
   const { data, error } = await supabaseClient
     .from("stock_requests")
     .select("*")
-    .in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi"])
+    .in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi", "montaj_bitti", "iptal"])
     .order("created_at", { ascending: false })
     .limit(100);
   if (error) {
@@ -275,7 +275,12 @@ function renderStockRequests() {
 if (state.requestFilter !== "all") {
   list = list.filter(req => req.status === state.requestFilter);
 }
-  el.stockRequestsBox.innerHTML = state.stockRequests.map((req) => `
+  if (!list.length) {
+  el.stockRequestsBox.innerHTML = `<div class="empty-state">Bu filtrede talep yok</div>`;
+  return;
+}
+
+el.stockRequestsBox.innerHTML = list.map((req) => `
     <div class="movement-item">
       <div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge ${req.status === "bekliyor" ? "cikis" : "giris"}">${escapeHtml(req.status)}</span></div>
       <div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div>
