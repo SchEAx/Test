@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stok Takip</title>
   <meta name="theme-color" content="#111827" />
+  <link rel="apple-touch-icon" href="/logo.png" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -12,9 +13,12 @@
 <body>
   <div class="app-shell">
     <header class="topbar">
-      <div>
-        <h1>Stok Takip</h1>
-        <p class="muted">Depo talep / rezerv / stok sistemi</p>
+      <div class="brand-wrap">
+        <img src="/logo.png" alt="Logo" class="app-logo" onerror="this.style.display='none'" />
+        <div>
+          <h1>Stok Takip</h1>
+          <p class="muted">Depo talep / rezerv / stok sistemi</p>
+        </div>
       </div>
       <div class="top-actions">
         <button id="enableNotifyBtn" class="btn ghost">Bildirim Aç</button>
