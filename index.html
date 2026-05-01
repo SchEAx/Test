@@ -4,193 +4,115 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stok Takip</title>
-
   <meta name="theme-color" content="#111827" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div>
         <h1>Stok Takip</h1>
-        <p class="muted">Barkod ile ürün giriş / çıkış / stok görüntüleme</p>
+        <p class="muted">Supabase stok / depo talep / rezerv sistemi</p>
       </div>
       <button id="refreshBtn" class="btn secondary">Yenile</button>
     </header>
 
-    <section class="stats-grid">
-      <div class="card stat-card">
-        <span class="stat-label">Toplam Ürün</span>
-        <strong id="totalProductCount">0</strong>
-      </div>
-
-      <div class="card stat-card">
-        <span class="stat-label">Toplam Stok</span>
-        <strong id="totalStockCount">0</strong>
-      </div>
-
-      <div class="card stat-card danger">
-        <span class="stat-label">Kritik Stok</span>
-        <strong id="criticalStockCount">0</strong>
-      </div>
+    <section class="stats-grid stats-grid-4">
+      <div class="card stat-card"><span class="stat-label">Toplam Ürün</span><strong id="totalProductCount">0</strong></div>
+      <div class="card stat-card"><span class="stat-label">Toplam Stok</span><strong id="totalStockCount">0</strong></div>
+      <div class="card stat-card"><span class="stat-label">Rezerve</span><strong id="reservedStockCount">0</strong></div>
+      <div class="card stat-card danger"><span class="stat-label">Kritik Stok</span><strong id="criticalStockCount">0</strong></div>
     </section>
-<div id="page-add" class="page hidden">
-    <section class="grid-2">
-      <div class="card">
-        <h2>Ürün Kartı</h2>
-        <form id="productForm" class="form-grid">
-          <input type="hidden" id="productId" />
 
-          <div>
-            <label>Barkod</label>
-            <input id="barcode" type="text" placeholder="Barkod okut / yaz" autocomplete="off" />
-          </div>
+    <div id="page-search" class="page">
+      <section class="card">
+        <div class="section-head">
+          <div><h2>Ürün Listesi</h2><p class="muted">Arama ile filtrelenir</p></div>
+          <input id="searchInput" class="search-input" type="text" placeholder="Megane, paspas, rizline..." />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Barkod</th><th>Ürün Adı</th><th>Ürün Markası</th><th>Kategori</th><th>Alt Kategori</th>
+                <th>Araç Markası</th><th>Araç Modeli</th><th>Araç Tipi</th><th>Varyant</th>
+                <th>Stok</th><th>Rezerve</th><th>Kullanılabilir</th><th>Min</th><th>Konum</th><th>İşlem</th>
+              </tr>
+            </thead>
+            <tbody id="productTableBody"><tr><td colspan="15" class="empty-cell">Veri bekleniyor...</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
-          <div>
-            <label>Ürün Adı</label>
-            <input id="name" type="text" placeholder="Örn: Cam Rüzgarlığı" />
-          </div>
+    <div id="page-add" class="page hidden">
+      <section class="grid-2">
+        <div class="card">
+          <h2>Ürün Kartı</h2>
+          <form id="productForm" class="form-grid">
+            <input type="hidden" id="productId" />
+            <div><label>Barkod</label><input id="barcode" type="text" placeholder="Barkod okut / yaz" autocomplete="off" /></div>
+            <div><label>Ürün Adı *</label><input id="name" type="text" placeholder="Örn: Cam Rüzgarlığı" /></div>
+            <div><label>Ürün Markası</label><input id="productBrand" type="text" placeholder="Örn: Rizline" /></div>
+            <div><label>Kategori</label><input id="category" type="text" placeholder="Örn: Aksesuar" /></div>
+            <div><label>Alt Kategori</label><input id="subCategory" type="text" placeholder="Örn: Paspas" /></div>
+            <div><label>Araç Markası</label><input id="carBrand" type="text" placeholder="Örn: Renault" /></div>
+            <div><label>Araç Modeli</label><input id="carModel" type="text" placeholder="Örn: Clio 4" /></div>
+            <div><label>Araç Tipi</label><input id="carType" type="text" placeholder="Örn: HB / Sedan / SUV" /></div>
+            <div><label>Varyant</label><input id="variant" type="text" placeholder="Örn: 2016-2019" /></div>
+            <div><label>Mevcut Stok</label><input id="stock" type="number" min="0" step="1" placeholder="0" /></div>
+            <div><label>Minimum Stok</label><input id="minStock" type="number" min="0" step="1" placeholder="0" /></div>
+            <div><label>Raf / Konum</label><input id="location" type="text" placeholder="Örn: A-12" /></div>
+            <div class="full"><label>Açıklama</label><textarea id="note" rows="3" placeholder="İsteğe bağlı not"></textarea></div>
+            <div class="full row-gap">
+              <button type="submit" id="saveProductBtn" class="btn primary">Ürünü Kaydet</button>
+              <button type="button" id="clearProductBtn" class="btn ghost">Formu Temizle</button>
+            </div>
+          </form>
+        </div>
 
-          <div>
-  <label>Ürün Markası</label>
-  <input id="productBrand" type="text" placeholder="Örn: Rizline" />
-</div>
+        <div class="card">
+          <h2>Stok Giriş / Çıkış</h2>
+          <div class="form-grid"><div class="full"><label>Ürün Ara</label><input id="movementSearchInput" type="text" placeholder="Örn: Megane, paspas, rizline..." /></div></div>
+          <div id="movementSearchList" class="movement-search-list"><div class="empty-state">Arama yaparak ürün seç</div></div>
+        </div>
+      </section>
+    </div>
 
-<div>
-  <label>Kategori</label>
-  <input id="category" type="text" placeholder="Örn: Aksesuar" />
-</div>
+    <div id="page-requests" class="page hidden">
+      <section class="grid-2">
+        <div class="card">
+          <div class="section-head"><div><h2>Depo Talepleri</h2><p class="muted">Araç kabulden gelen bekleyen / rezerve talepler</p></div><button class="btn secondary" onclick="loadStockRequests()">Talepleri Yenile</button></div>
+          <div id="stockRequestsBox" class="movement-list"><div class="empty-state">Talep bekleniyor...</div></div>
+        </div>
 
-<div>
-  <label>Alt Kategori</label>
-  <input id="subCategory" type="text" placeholder="Örn: Paspas" />
-</div>
+        <div id="reservationPanel" class="card hidden">
+          <h2>Ürün Eşleştir / Rezerve Et</h2>
+          <div class="request-detail"><b>İstenen ürün:</b><div id="requestedTextBox" class="muted"></div></div>
+          <label>Stoktan Ürün Ara</label>
+          <input id="productSearchInput" type="text" placeholder="Ürün ara..." />
+          <div id="productMatchBox" class="movement-search-list"><div class="empty-state">Ürün aramak için yazmaya başla</div></div>
+        </div>
+      </section>
+    </div>
 
-<div>
-  <label>Araç Markası</label>
-  <input id="carBrand" type="text" placeholder="Örn: Renault" />
-</div>
-
-<div>
-  <label>Araç Modeli</label>
-  <input id="carModel" type="text" placeholder="Örn: Clio 4" />
-</div>
-
-<div>
-  <label>Araç Tipi</label>
-  <input id="carType" type="text" placeholder="Örn: HB / Sedan / SUV" />
-</div>
-
-<div>
-  <label>Varyant</label>
-  <input id="variant" type="text" placeholder="Örn: 2016-2019, Makyajlı" />
-</div>
-
-<div>
-  <label>Mevcut Stok</label>
-  <input id="stock" type="number" min="0" step="1" placeholder="0" />
-</div>
-
-<div>
-  <label>Minimum Stok</label>
-  <input id="minStock" type="number" min="0" step="1" placeholder="0" />
-</div>
-
-<div>
-  <label>Raf / Konum</label>
-  <input id="location" type="text" placeholder="Örn: A-12" />
-</div>
-          <div class="full">
-            <label>Açıklama</label>
-            <textarea id="note" rows="3" placeholder="İsteğe bağlı not"></textarea>
-          </div>
-
-          <div class="full row-gap">
-            <button type="submit" id="saveProductBtn" class="btn primary">Ürünü Kaydet</button>
-            <button type="button" id="clearProductBtn" class="btn ghost">Formu Temizle</button>
-          </div>
-        </form>
-      </div>
-
-<div class="card">
-  <h2>Stok Giriş / Çıkış</h2>
-
-  <div class="form-grid">
-    <div class="full">
-      <label>Ürün Ara</label>
-      <input id="movementSearchInput" type="text" placeholder="Örn: Megane, paspas, rizline..." />
+    <div id="page-movements" class="page hidden">
+      <section class="card">
+        <div class="section-head"><div><h2>Son Hareketler</h2><p class="muted">Giriş / çıkış / rezerv geçmişi</p></div></div>
+        <div id="movementList" class="movement-list"><div class="empty-state">Henüz hareket yok</div></div>
+      </section>
     </div>
   </div>
 
-  <div id="movementSearchList" class="movement-search-list">
-    <div class="empty-state">Arama yaparak ürün seç</div>
-  </div>
-</div>
-        </form>
-      </div>
-    </section>
-<div id="page-search" class="page">
-    <section class="card">
-      <div class="section-head">
-        <div>
-          <h2>Ürün Listesi</h2>
-          <p class="muted">Arama ile filtrelenir</p>
-        </div>
-        <input id="searchInput" class="search-input" type="text" placeholder="Ürün adı ile ara..." />
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-  <th>Barkod</th>
-  <th>Ürün Adı</th>
-  <th>Ürün Markası</th>
-  <th>Kategori</th>
-  <th>Alt Kategori</th>
-  <th>Araç Markası</th>
-  <th>Araç Modeli</th>
-  <th>Araç Tipi</th>
-  <th>Varyant</th>
-  <th>Stok</th>
-  <th>Min</th>
-  <th>Konum</th>
-  <th>İşlem</th>
-</tr>
-          </thead>
-          <tbody id="productTableBody">
-            <tr>
-              <td colspan="13" class="empty-cell">Veri bekleniyor...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </div>
-</div>
-  <div id="page-movements" class="page hidden">
-    <section class="card">
-      <div class="section-head">
-        <div>
-          <h2>Son Hareketler</h2>
-          <p class="muted">En son stok giriş / çıkış kayıtları</p>
-        </div>
-      </div>
-
-      <div id="movementList" class="movement-list">
-        <div class="empty-state">Henüz hareket yok</div>
-      </div>
-    </section>
-  </div>
-  </div>
-
   <div id="toast" class="toast hidden"></div>
-<div class="bottom-nav">
-  <button onclick="switchTab('search')">Ara</button>
-  <button onclick="switchTab('add')">Ürün Ekle</button>
-  <button onclick="switchTab('movements')">Hareketler</button>
-</div>
+  <div class="bottom-nav bottom-nav-4">
+    <button onclick="switchTab('search')">Ara</button>
+    <button onclick="switchTab('add')">Ürün Ekle</button>
+    <button onclick="switchTab('requests')">Depo</button>
+    <button onclick="switchTab('movements')">Hareketler</button>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>
