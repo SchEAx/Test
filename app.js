@@ -3,542 +3,100 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const state = {
-  products: [],
-  filteredProducts: [],
-  movements: [],
-  stockRequests: [],
-  requestFilter: "all",
-  loading: false,
-  selectedStockRequestId: null,
+  products: [], filteredProducts: [], movements: [], stockRequests: [], requestFilter: "all",
+  activeTab: "requests", loading: false, selectedStockRequestId: null, seenRequestIds: new Set(), realtimeReady: false
 };
 
 const el = {
-  totalProductCount: document.getElementById("totalProductCount"),
-  totalStockCount: document.getElementById("totalStockCount"),
-  reservedStockCount: document.getElementById("reservedStockCount"),
-  criticalStockCount: document.getElementById("criticalStockCount"),
-  refreshBtn: document.getElementById("refreshBtn"),
-  productForm: document.getElementById("productForm"),
-  productId: document.getElementById("productId"),
-  barcode: document.getElementById("barcode"),
-  name: document.getElementById("name"),
-  productBrand: document.getElementById("productBrand"),
-  category: document.getElementById("category"),
-  subCategory: document.getElementById("subCategory"),
-  carBrand: document.getElementById("carBrand"),
-  carModel: document.getElementById("carModel"),
-  carType: document.getElementById("carType"),
-  variant: document.getElementById("variant"),
-  stock: document.getElementById("stock"),
-  minStock: document.getElementById("minStock"),
-  location: document.getElementById("location"),
-  note: document.getElementById("note"),
-  saveProductBtn: document.getElementById("saveProductBtn"),
-  clearProductBtn: document.getElementById("clearProductBtn"),
-  movementSearchInput: document.getElementById("movementSearchInput"),
-  movementSearchList: document.getElementById("movementSearchList"),
-  searchInput: document.getElementById("searchInput"),
-  productTableBody: document.getElementById("productTableBody"),
-  movementList: document.getElementById("movementList"),
-  stockRequestsBox: document.getElementById("stockRequestsBox"),
-  reservationPanel: document.getElementById("reservationPanel"),
-  requestedTextBox: document.getElementById("requestedTextBox"),
-  productSearchInput: document.getElementById("productSearchInput"),
-  productMatchBox: document.getElementById("productMatchBox"),
-  toast: document.getElementById("toast"),
+  totalProductCount: document.getElementById("totalProductCount"), totalStockCount: document.getElementById("totalStockCount"), reservedStockCount: document.getElementById("reservedStockCount"), criticalStockCount: document.getElementById("criticalStockCount"),
+  refreshBtn: document.getElementById("refreshBtn"), enableNotifyBtn: document.getElementById("enableNotifyBtn"), productForm: document.getElementById("productForm"), productId: document.getElementById("productId"), barcode: document.getElementById("barcode"),
+  productBrand: document.getElementById("productBrand"), category: document.getElementById("category"), carBrand: document.getElementById("carBrand"), carModel: document.getElementById("carModel"), carType: document.getElementById("carType"), vehicleYear: document.getElementById("vehicleYear"), stock: document.getElementById("stock"), minStock: document.getElementById("minStock"), location: document.getElementById("location"), note: document.getElementById("note"),
+  saveProductBtn: document.getElementById("saveProductBtn"), clearProductBtn: document.getElementById("clearProductBtn"), movementSearchInput: document.getElementById("movementSearchInput"), movementSearchList: document.getElementById("movementSearchList"), searchInput: document.getElementById("searchInput"), productTableBody: document.getElementById("productTableBody"), movementList: document.getElementById("movementList"),
+  stockRequestsBox: document.getElementById("stockRequestsBox"), reservationPanel: document.getElementById("reservationPanel"), requestedTextBox: document.getElementById("requestedTextBox"), productSearchInput: document.getElementById("productSearchInput"), productMatchBox: document.getElementById("productMatchBox"), toast: document.getElementById("toast")
 };
 
 function showToast(message, isError = false) {
-  el.toast.textContent = message;
-  el.toast.classList.remove("hidden");
+  el.toast.textContent = message; el.toast.classList.remove("hidden");
   el.toast.style.borderColor = isError ? "rgba(220,38,38,0.5)" : "rgba(22,163,74,0.5)";
-  setTimeout(() => el.toast.classList.add("hidden"), 3000);
+  setTimeout(() => el.toast.classList.add("hidden"), 3500);
 }
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
-}
-
+function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+function normalizeText(value) { return String(value || "").toLocaleLowerCase("tr-TR").trim(); }
+function formatDate(value) { if (!value) return "-"; const d = new Date(value); if (Number.isNaN(d.getTime())) return value; return d.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }); }
+function buildProductName(row) { return [row.product_brand, row.category, row.vehicle_brand, row.vehicle_model, row.vehicle_type, row.vehicle_year].filter(Boolean).join(" ").replace(/\s+/g, " ").trim(); }
 function mapProduct(row) {
-  return {
-    id: row.id || "",
-    barcode: row.barcode || "",
-    name: row.product_name || "",
-    productBrand: row.product_brand || "",
-    category: row.category || "",
-    subCategory: row.sub_category || "",
-    carBrand: row.vehicle_brand || "",
-    carModel: row.vehicle_model || "",
-    carType: row.vehicle_type || "",
-    variant: row.variant || "",
-    stock: Number(row.quantity || 0),
-    reserved: Number(row.reserved_quantity || 0),
-    minStock: Number(row.min_stock || 0),
-    location: row.location || "",
-    note: row.note || "",
-    createdAt: row.created_at || "",
-  };
+  return { id: row.id || "", barcode: row.barcode || "", name: row.product_name || buildProductName(row), productBrand: row.product_brand || "", category: row.category || "", carBrand: row.vehicle_brand || "", carModel: row.vehicle_model || "", carType: row.vehicle_type || "", vehicleYear: row.vehicle_year || "", stock: Number(row.quantity || 0), reserved: Number(row.reserved_quantity || 0), minStock: Number(row.min_stock || 0), location: row.location || "", note: row.note || "", createdAt: row.created_at || "" };
 }
-window.setRequestFilter = function(status) {
-  state.requestFilter = status;
-  renderStockRequests();
-};
 function toProductRow(payload) {
-  return {
-    barcode: payload.barcode || null,
-    product_name: payload.name,
-    product_brand: payload.productBrand || null,
-    category: payload.category || null,
-    sub_category: payload.subCategory || null,
-    vehicle_brand: payload.carBrand || null,
-    vehicle_model: payload.carModel || null,
-    vehicle_type: payload.carType || null,
-    variant: payload.variant || null,
-    quantity: Number(payload.stock || 0),
-    min_stock: Number(payload.minStock || 0),
-    location: payload.location || null,
-    note: payload.note || null,
-  };
+  const productName = [payload.productBrand, payload.category, payload.carBrand, payload.carModel, payload.carType, payload.vehicleYear].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+  return { barcode: payload.barcode || null, product_name: productName || payload.category, product_brand: payload.productBrand || null, category: payload.category || null, vehicle_brand: payload.carBrand || null, vehicle_model: payload.carModel || null, vehicle_type: payload.carType || null, vehicle_year: payload.vehicleYear || null, quantity: Number(payload.stock || 0), min_stock: Number(payload.minStock || 0), location: payload.location || null, note: payload.note || null };
 }
+function formatRequestStatus(status) { return ({ bekliyor: "Bekliyor", rezerve_edildi: "Rezerve", teslim_edildi: "Teslim Edildi", montaj_bitti: "Tamamlandı", iptal: "İptal" })[status] || status || "-"; }
+function setLoading(flag) { state.loading = flag; el.refreshBtn.disabled = flag; el.saveProductBtn.disabled = flag; el.movementSearchInput.disabled = flag; el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile"; el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet"; }
 
-function setLoading(flag) {
-  state.loading = flag;
-  el.refreshBtn.disabled = flag;
-  el.saveProductBtn.disabled = flag;
-  el.movementSearchInput.disabled = flag;
-  el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile";
-  el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet";
-}
-
-async function loadProducts() {
-  const { data, error } = await supabaseClient
-    .from("stock_products")
-    .select("*")
-    .order("product_name", { ascending: true });
-  if (error) throw error;
-  state.products = (data || []).map(mapProduct);
-  applySearch();
-  updateStats();
-}
-
-async function loadMovements() {
-  const { data, error } = await supabaseClient
-    .from("stock_movements")
-    .select("*, stock_products(product_name, barcode)")
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (error) throw error;
-  state.movements = data || [];
-  renderMovements();
-}
-
+async function loadProducts() { const { data, error } = await supabaseClient.from("stock_products").select("*").order("product_name", { ascending: true }); if (error) throw error; state.products = (data || []).map(mapProduct); applySearch(); updateStats(); }
+async function loadMovements() { const { data, error } = await supabaseClient.from("stock_movements").select("*, stock_products(product_name, barcode)").order("created_at", { ascending: false }).limit(100); if (error) throw error; state.movements = data || []; renderMovements(); }
 async function loadStockRequests() {
-  const { data, error } = await supabaseClient
-    .from("stock_requests")
-    .select("*")
-    .in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi", "montaj_bitti", "iptal"])
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (error) {
-    el.stockRequestsBox.innerHTML = `<div class="empty-state">Talep alınamadı: ${escapeHtml(error.message)}</div>`;
-    return;
-  }
-  state.stockRequests = data || [];
-  renderStockRequests();
+  const { data, error } = await supabaseClient.from("stock_requests").select("*").in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi", "montaj_bitti", "iptal"]).order("created_at", { ascending: false }).limit(150);
+  if (error) { el.stockRequestsBox.innerHTML = `<div class="empty-state">Talep alınamadı: ${escapeHtml(error.message)}</div>`; return; }
+  state.stockRequests = data || []; state.stockRequests.forEach((r) => state.seenRequestIds.add(r.id)); renderStockRequests();
 }
 window.loadStockRequests = loadStockRequests;
-
-async function loadAll() {
-  try {
-    setLoading(true);
-    await Promise.all([loadProducts(), loadMovements(), loadStockRequests()]);
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || "Veriler yüklenemedi", true);
-  } finally {
-    setLoading(false);
-  }
-}
-
-function updateStats() {
-  const totalProduct = state.products.length;
-  const totalStock = state.products.reduce((sum, p) => sum + Number(p.stock || 0), 0);
-  const reserved = state.products.reduce((sum, p) => sum + Number(p.reserved || 0), 0);
-  const critical = state.products.filter((p) => (Number(p.stock || 0) - Number(p.reserved || 0)) <= Number(p.minStock || 0)).length;
-  el.totalProductCount.textContent = totalProduct;
-  el.totalStockCount.textContent = totalStock;
-  el.reservedStockCount.textContent = reserved;
-  el.criticalStockCount.textContent = critical;
-}
-
-function productSearchText(p) {
-  return [p.barcode, p.name, p.productBrand, p.category, p.subCategory, p.carBrand, p.carModel, p.carType, p.variant, p.location].join(" ").toLowerCase();
-}
-
-function applySearch() {
-  const q = (el.searchInput.value || "").trim().toLowerCase();
-  state.filteredProducts = q ? state.products.filter((p) => productSearchText(p).includes(q)) : state.products;
-  renderProducts();
-}
-
+async function loadAll() { try { setLoading(true); await Promise.all([loadProducts(), loadMovements(), loadStockRequests()]); } catch (err) { console.error(err); showToast(err.message || "Veriler yüklenemedi", true); } finally { setLoading(false); } }
+function updateStats() { const totalProduct = state.products.length; const totalStock = state.products.reduce((sum, p) => sum + Number(p.stock || 0), 0); const reserved = state.products.reduce((sum, p) => sum + Number(p.reserved || 0), 0); const critical = state.products.filter((p) => (Number(p.stock || 0) - Number(p.reserved || 0)) <= Number(p.minStock || 0)).length; el.totalProductCount.textContent = totalProduct; el.totalStockCount.textContent = totalStock; el.reservedStockCount.textContent = reserved; el.criticalStockCount.textContent = critical; }
+function productSearchText(p) { return normalizeText([p.name, p.productBrand, p.category, p.carBrand, p.carModel, p.carType, p.vehicleYear, p.location, p.note].join(" ")); }
+function applySearch() { const q = normalizeText(el.searchInput.value); state.filteredProducts = q ? state.products.filter((p) => productSearchText(p).includes(q)) : state.products; renderProducts(); }
 function renderProducts() {
-  if (!state.filteredProducts.length) {
-    el.productTableBody.innerHTML = `<tr><td colspan="15" class="empty-cell">Kayıt bulunamadı</td></tr>`;
-    return;
-  }
-  el.productTableBody.innerHTML = state.filteredProducts.map((p) => {
-    const available = Number(p.stock || 0) - Number(p.reserved || 0);
-    const isLow = available <= Number(p.minStock || 0);
-    return `
-      <tr>
-        <td>${escapeHtml(p.barcode || "-")}</td>
-        <td>${escapeHtml(p.name || "-")}</td>
-        <td>${escapeHtml(p.productBrand || "-")}</td>
-        <td>${escapeHtml(p.category || "-")}</td>
-        <td>${escapeHtml(p.subCategory || "-")}</td>
-        <td>${escapeHtml(p.carBrand || "-")}</td>
-        <td>${escapeHtml(p.carModel || "-")}</td>
-        <td>${escapeHtml(p.carType || "-")}</td>
-        <td>${escapeHtml(p.variant || "-")}</td>
-        <td>${Number(p.stock || 0)}</td>
-        <td>${Number(p.reserved || 0)}</td>
-        <td class="${isLow ? "low-stock" : ""}">${available}</td>
-        <td>${Number(p.minStock || 0)}</td>
-        <td>${escapeHtml(p.location || "-")}</td>
-        <td><div class="action-group"><button class="action-btn edit" onclick="editProduct('${p.id}')">Düzenle</button><button class="action-btn delete" onclick="deleteProduct('${p.id}')">Sil</button></div></td>
-      </tr>`;
-  }).join("");
+  if (!state.filteredProducts.length) { el.productTableBody.innerHTML = `<tr><td colspan="12" class="empty-cell">Kayıt bulunamadı</td></tr>`; return; }
+  el.productTableBody.innerHTML = state.filteredProducts.map((p) => { const available = Number(p.stock || 0) - Number(p.reserved || 0); const isLow = available <= Number(p.minStock || 0); return `<tr><td>${escapeHtml(p.productBrand || "-")}</td><td>${escapeHtml(p.category || "-")}</td><td>${escapeHtml(p.carBrand || "-")}</td><td>${escapeHtml(p.carModel || "-")}</td><td>${escapeHtml(p.carType || "-")}</td><td>${escapeHtml(p.vehicleYear || "-")}</td><td>${Number(p.stock || 0)}</td><td>${Number(p.reserved || 0)}</td><td class="${isLow ? "low-stock" : ""}">${available}</td><td>${Number(p.minStock || 0)}</td><td>${escapeHtml(p.location || "-")}</td><td><div class="action-group"><button class="action-btn edit" onclick="editProduct('${p.id}')">Düzenle</button><button class="action-btn delete" onclick="deleteProduct('${p.id}')">Sil</button></div></td></tr>`; }).join("");
 }
-
 function renderMovements() {
-  if (!state.movements.length) {
-    el.movementList.innerHTML = `<div class="empty-state">Henüz hareket yok</div>`;
-    return;
-  }
-  el.movementList.innerHTML = state.movements.map((m) => {
-    const productName = m.stock_products?.product_name || m.description || "-";
-    const barcode = m.stock_products?.barcode || "-";
-    const type = String(m.movement_type || "").toLowerCase();
-    const typeClass = type.includes("giris") || type.includes("rezerv") && !type.includes("iptal") ? "giris" : "cikis";
-    return `
-      <div class="movement-item">
-        <div class="movement-top"><div><strong>${escapeHtml(productName)}</strong><div class="muted">${escapeHtml(barcode)}</div></div><span class="badge ${typeClass}">${escapeHtml(m.movement_type || "-")}</span></div>
-        <div>Miktar: <strong>${Number(m.quantity || 0)}</strong></div>
-        <div>Plaka: <strong>${escapeHtml(m.plate || "-")}</strong></div>
-        <div>Kayıt No: <strong>${escapeHtml(m.record_no || "-")}</strong></div>
-        <div>Tarih: <strong>${formatDate(m.created_at)}</strong></div>
-        <div>Not: <strong>${escapeHtml(m.description || "-")}</strong></div>
-      </div>`;
-  }).join("");
+  if (!state.movements.length) { el.movementList.innerHTML = `<div class="empty-state">Henüz hareket yok</div>`; return; }
+  el.movementList.innerHTML = state.movements.map((m) => { const productName = m.stock_products?.product_name || m.description || "-"; const type = String(m.movement_type || "").toLowerCase(); const typeClass = type.includes("giris") || (type.includes("rezerv") && !type.includes("iptal")) ? "giris" : "cikis"; return `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(productName)}</strong><div class="muted">${escapeHtml(m.description || "-")}</div></div><span class="badge ${typeClass}">${escapeHtml(m.movement_type || "-")}</span></div><div>Miktar: <strong>${Number(m.quantity || 0)}</strong></div><div>Plaka: <strong>${escapeHtml(m.plate || "-")}</strong></div><div>Kayıt No: <strong>${escapeHtml(m.record_no || "-")}</strong></div><div>Tarih: <strong>${formatDate(m.created_at)}</strong></div></div>`; }).join("");
 }
-
 function renderMovementSearchResults() {
-  const q = (el.movementSearchInput.value || "").trim().toLowerCase();
-  if (!q) {
-    el.movementSearchList.innerHTML = `<div class="empty-state">Arama yaparak ürün seç</div>`;
-    return;
-  }
-  const results = state.products.filter((p) => productSearchText(p).includes(q)).slice(0, 30);
-  if (!results.length) {
-    el.movementSearchList.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
-    return;
-  }
-  el.movementSearchList.innerHTML = results.map((p) => {
-    const available = Number(p.stock || 0) - Number(p.reserved || 0);
-    return `
-      <div class="movement-search-item">
-        <div class="movement-search-info"><strong>${escapeHtml(p.name || "-")}</strong><div class="muted">${escapeHtml(p.category || "-")} / ${escapeHtml(p.subCategory || "-")}</div><div class="muted">${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "-")} ${escapeHtml(p.variant || "")}</div><div class="muted">Barkod: ${escapeHtml(p.barcode || "-")} | Stok: <strong>${p.stock}</strong> | Rezerve: <strong>${p.reserved}</strong> | Kullanılabilir: <strong>${available}</strong></div></div>
-        <div class="movement-search-actions"><button class="btn success" onclick="quickStockAction('${p.id}', 'giris')">Giriş</button><button class="btn danger" onclick="quickStockAction('${p.id}', 'cikis')">Çıkış</button></div>
-      </div>`;
-  }).join("");
-}
-function formatRequestStatus(status) {
-  const map = {
-    bekliyor: "Bekliyor",
-    rezerve_edildi: "Rezerve",
-    teslim_edildi: "Teslim Edildi",
-    montaj_bitti: "Tamamlandı",
-    iptal: "İptal"
-  };
-
-  return map[status] || status || "-";
+  const q = normalizeText(el.movementSearchInput.value); if (!q) { el.movementSearchList.innerHTML = `<div class="empty-state">Arama yaparak ürün seç</div>`; return; }
+  const results = state.products.filter((p) => productSearchText(p).includes(q)).slice(0, 30); if (!results.length) { el.movementSearchList.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`; return; }
+  el.movementSearchList.innerHTML = results.map((p) => { const available = Number(p.stock || 0) - Number(p.reserved || 0); return `<div class="movement-search-item"><div class="movement-search-info"><strong>${escapeHtml(p.category || p.name || "-")}</strong><div class="muted">${escapeHtml(p.productBrand || "-")} / ${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "")} ${escapeHtml(p.vehicleYear || "")}</div><div class="muted">Stok: <strong>${p.stock}</strong> | Rezerve: <strong>${p.reserved}</strong> | Kullanılabilir: <strong>${available}</strong></div></div><div class="movement-search-actions"><button class="btn success" onclick="quickStockAction('${p.id}', 'giris')">Giriş</button><button class="btn danger" onclick="quickStockAction('${p.id}', 'cikis')">Çıkış</button></div></div>`; }).join("");
 }
 function renderStockRequests() {
-  let list = state.stockRequests || [];
-
-  if (state.requestFilter !== "all") {
-    list = list.filter(req => req.status === state.requestFilter);
-  }
-
-  if (!list.length) {
-    el.stockRequestsBox.innerHTML = `<div class="empty-state">Bu filtrede talep yok</div>`;
-    return;
-  }
-
-  el.stockRequestsBox.innerHTML = list.map((req) => `
-    <div class="movement-item">
-      <div class="movement-top">
-        <div>
-          <strong>${escapeHtml(req.plate || "Plaka yok")}</strong>
-          <div class="muted">${escapeHtml(req.customer_name || "-")}</div>
-        </div>
-
-        <span class="badge status-${escapeHtml(req.status || "bos")}">
-          ${formatRequestStatus(req.status)}
-        </span>
-      </div>
-
-      <div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div>
-      <div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div>
-      <div>Tarih: <strong>${formatDate(req.created_at)}</strong></div>
-
-      <div class="row-gap" style="margin-top:10px;">
-        <button class="btn primary" onclick="openReservationPanel('${req.id}')">
-          Ürün Eşleştir
-        </button>
-
-        ${req.status === "rezerve_edildi" ? `
-          <button class="btn danger" onclick="cancelReservation('${req.id}')">
-            Rezervi İptal Et
-          </button>
-        ` : ""}
-      </div>
-    </div>
-  `).join("");
+  let list = state.stockRequests || []; if (state.requestFilter !== "all") list = list.filter(req => req.status === state.requestFilter);
+  if (!list.length) { el.stockRequestsBox.innerHTML = `<div class="empty-state">Bu filtrede talep yok</div>`; return; }
+  el.stockRequestsBox.innerHTML = list.map((req) => `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge status-${escapeHtml(req.status || "bos")}">${formatRequestStatus(req.status)}</span></div><div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div><div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div><div>Tarih: <strong>${formatDate(req.created_at)}</strong></div><div class="row-gap" style="margin-top:10px;"><button class="btn primary" onclick="openReservationPanel('${req.id}')">Ürün Eşleştir</button>${req.status === "rezerve_edildi" ? `<button class="btn danger" onclick="cancelReservation('${req.id}')">Rezervi İptal Et</button>` : ""}</div></div>`).join("");
 }
-window.cancelReservation = async function(requestId) {
-  if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return;
-
-  try {
-    setLoading(true);
-
-    const { data, error } = await supabaseClient.rpc("cancel_stock_reservation", {
-      p_request_id: requestId
-    });
-
-    if (error) throw error;
-
-    showToast("Rezerv iptal edildi ✅");
-    await loadAll();
-
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || "Rezerv iptal edilemedi", true);
-  } finally {
-    setLoading(false);
-  }
-};
-function clearProductForm() {
-  [el.productId, el.barcode, el.name, el.productBrand, el.category, el.subCategory, el.carBrand, el.carModel, el.carType, el.variant, el.stock, el.minStock, el.location, el.note].forEach((x) => x.value = "");
-}
-
-function fillProductForm(product) {
-  el.productId.value = product.id || "";
-  el.barcode.value = product.barcode || "";
-  el.name.value = product.name || "";
-  el.productBrand.value = product.productBrand || "";
-  el.category.value = product.category || "";
-  el.subCategory.value = product.subCategory || "";
-  el.carBrand.value = product.carBrand || "";
-  el.carModel.value = product.carModel || "";
-  el.carType.value = product.carType || "";
-  el.variant.value = product.variant || "";
-  el.stock.value = product.stock ?? "";
-  el.minStock.value = product.minStock ?? "";
-  el.location.value = product.location || "";
-  el.note.value = product.note || "";
-  switchTab("add");
-  window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-window.editProduct = function(id) {
-  const product = state.products.find((p) => String(p.id) === String(id));
-  if (!product) return showToast("Ürün bulunamadı", true);
-  fillProductForm(product);
-};
-
-window.deleteProduct = async function(id) {
-  if (!confirm("Bu ürünü silmek istediğine emin misin?")) return;
-  try {
-    setLoading(true);
-    const { error } = await supabaseClient.from("stock_products").delete().eq("id", id);
-    if (error) throw error;
-    showToast("Ürün silindi");
-    await loadAll();
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || "Ürün silinemedi", true);
-  } finally { setLoading(false); }
-};
-
+window.setRequestFilter = function(status) { state.requestFilter = status; renderStockRequests(); };
+function clearProductForm() { [el.productId, el.barcode, el.productBrand, el.category, el.carBrand, el.carModel, el.carType, el.vehicleYear, el.stock, el.minStock, el.location, el.note].forEach((x) => x.value = ""); }
+function fillProductForm(product) { el.productId.value = product.id || ""; el.barcode.value = product.barcode || ""; el.productBrand.value = product.productBrand || ""; el.category.value = product.category || ""; el.carBrand.value = product.carBrand || ""; el.carModel.value = product.carModel || ""; el.carType.value = product.carType || ""; el.vehicleYear.value = product.vehicleYear || ""; el.stock.value = product.stock ?? ""; el.minStock.value = product.minStock ?? ""; el.location.value = product.location || ""; el.note.value = product.note || ""; switchTab("add"); window.scrollTo({ top: 0, behavior: "smooth" }); }
+window.editProduct = function(id) { const product = state.products.find((p) => String(p.id) === String(id)); if (!product) return showToast("Ürün bulunamadı", true); fillProductForm(product); };
+window.deleteProduct = async function(id) { if (!confirm("Bu ürünü silmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.from("stock_products").delete().eq("id", id); if (error) throw error; showToast("Ürün silindi"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Ürün silinemedi", true); } finally { setLoading(false); } };
 window.quickStockAction = async function(id, type) {
-  const product = state.products.find((p) => String(p.id) === String(id));
-  if (!product) return showToast("Ürün bulunamadı", true);
-  const qtyText = prompt(`${product.name} için ${type === "giris" ? "giriş" : "çıkış"} miktarı gir:`, "1");
-  if (qtyText === null) return;
-  const quantity = Number(qtyText);
-  if (!quantity || quantity <= 0) return showToast("Geçerli miktar gir", true);
-  const available = Number(product.stock || 0) - Number(product.reserved || 0);
-  if (type === "cikis" && available < quantity) return showToast(`Yeterli kullanılabilir stok yok. Kullanılabilir: ${available}`, true);
-  if (!confirm(`${product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
-  try {
-    setLoading(true);
-    const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity;
-    const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id);
-    if (updateError) throw updateError;
-    const { error: movementError } = await supabaseClient.from("stock_movements").insert({
-      product_id: id,
-      movement_type: type,
-      quantity,
-      description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}`
-    });
-    if (movementError) throw movementError;
-    showToast("Hareket kaydedildi");
-    await loadAll();
-    renderMovementSearchResults();
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || "Hareket kaydedilemedi", true);
-  } finally { setLoading(false); }
+  const product = state.products.find((p) => String(p.id) === String(id)); if (!product) return showToast("Ürün bulunamadı", true);
+  const qtyText = prompt(`${product.category || product.name} için ${type === "giris" ? "giriş" : "çıkış"} miktarı gir:`, "1"); if (qtyText === null) return;
+  const quantity = Number(qtyText); if (!quantity || quantity <= 0) return showToast("Geçerli miktar gir", true);
+  const available = Number(product.stock || 0) - Number(product.reserved || 0); if (type === "cikis" && available < quantity) return showToast(`Yeterli kullanılabilir stok yok. Kullanılabilir: ${available}`, true);
+  if (!confirm(`${product.category || product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
+  try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}` }); if (movementError) throw movementError; showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
 };
-
-window.openReservationPanel = function(requestId) {
-  const req = state.stockRequests.find((r) => String(r.id) === String(requestId));
-  if (!req) return showToast("Talep bulunamadı", true);
-  state.selectedStockRequestId = requestId;
-  el.reservationPanel.classList.remove("hidden");
-  el.requestedTextBox.textContent = req.requested_text || "-";
-  el.productSearchInput.value = req.requested_text || "";
-  searchProductsForRequest(el.productSearchInput.value);
-};
-
+window.openReservationPanel = function(requestId) { const req = state.stockRequests.find((r) => String(r.id) === String(requestId)); if (!req) return showToast("Talep bulunamadı", true); state.selectedStockRequestId = requestId; el.reservationPanel.classList.remove("hidden"); el.requestedTextBox.textContent = req.requested_text || "-"; el.productSearchInput.value = req.requested_text || ""; searchProductsForRequest(el.productSearchInput.value); };
 async function searchProductsForRequest(query = "") {
-  const q = String(query || "").trim().toLowerCase();
-  if (!q) {
-    el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`;
-    return;
-  }
-  const words = q
-  .replace(/[^\p{L}\p{N}\s]/gu, " ")
-  .split(/\s+/)
-  .filter(w => w.length >= 2);
-
-const results = state.products
-  .map((p) => {
-    const text = productSearchText(p);
-    let score = 0;
-
-    words.forEach(w => {
-      if (text.includes(w)) score += 1;
-    });
-
-    if (text.includes(q)) score += 5;
-
-    return { p, score };
-  })
-  .filter(x => x.score > 0)
-  .sort((a, b) => b.score - a.score)
-  .slice(0, 25)
-  .map(x => x.p);
-  if (!results.length) {
-    el.productMatchBox.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
-    return;
-  }
-  el.productMatchBox.innerHTML = results.map((p) => {
-    const available = Number(p.stock || 0) - Number(p.reserved || 0);
-    return `
-      <div class="movement-search-item">
-        <div class="movement-search-info"><strong>${escapeHtml(p.name || "-")}</strong><div class="muted">${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "-")} ${escapeHtml(p.variant || "")}</div><div class="muted">Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir: <strong>${available}</strong></div></div>
-        <div class="movement-search-actions"><input id="qty_${p.id}" type="number" value="1" min="1" style="max-width:90px" /><button class="btn primary" onclick="reserveProductForRequest('${p.id}')">Rezerve Et</button></div>
-      </div>`;
-  }).join("");
+  const q = normalizeText(query); if (!q) { el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`; return; }
+  const words = q.replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter(w => w.length >= 2);
+  const results = state.products.map((p) => { const text = productSearchText(p); let score = 0; words.forEach(w => { if (text.includes(w)) score += 1; }); if (text.includes(q)) score += 5; return { p, score }; }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 25).map(x => x.p);
+  if (!results.length) { el.productMatchBox.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`; return; }
+  el.productMatchBox.innerHTML = results.map((p) => { const available = Number(p.stock || 0) - Number(p.reserved || 0); return `<div class="movement-search-item"><div class="movement-search-info"><strong>${escapeHtml(p.category || p.name || "-")}</strong><div class="muted">${escapeHtml(p.productBrand || "-")} / ${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "")} ${escapeHtml(p.vehicleYear || "")}</div><div class="muted">Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir: <strong>${available}</strong></div></div><div class="movement-search-actions"><input id="qty_${p.id}" type="number" value="1" min="1" style="max-width:90px" /><button class="btn primary" onclick="reserveProductForRequest('${p.id}')">Rezerve Et</button></div></div>`; }).join("");
 }
-
 window.reserveProductForRequest = async function(productId) {
-  if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true);
-  const quantity = Number(document.getElementById("qty_" + productId)?.value || 1);
-  if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
-  try {
-    setLoading(true);
-    const { data, error } = await supabaseClient.rpc("reserve_stock_for_request", {
- p_request_id: state.selectedStockRequestId,
-  p_product_id: productId,
-  p_quantity: quantity,
-  p_delivered_to: ""
-});
-    if (error) throw error;
-    showToast("Stok rezerve edildi ✅");
-  await loadAll();
-
-const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId));
-
-if (stillSelected) {
-  el.reservationPanel.classList.remove("hidden");
-  el.requestedTextBox.textContent = stillSelected.requested_text || "-";
-  searchProductsForRequest(el.productSearchInput.value);
-}
-
-showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin.");
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || "Rezerve edilemedi", true);
-  } finally { setLoading(false); }
+  if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true); const quantity = Number(document.getElementById("qty_" + productId)?.value || 1); if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
+  try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); el.requestedTextBox.textContent = stillSelected.requested_text || "-"; searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
 };
-
-function switchTab(tab) {
-  ["search", "add", "requests", "movements"].forEach((key) => document.getElementById("page-" + key).classList.add("hidden"));
-  document.getElementById("page-" + tab).classList.remove("hidden");
-  if (tab === "requests") loadStockRequests();
-}
+window.cancelReservation = async function(requestId) { if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.rpc("cancel_stock_reservation", { p_request_id: requestId }); if (error) throw error; showToast("Rezerv iptal edildi ✅"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Rezerv iptal edilemedi", true); } finally { setLoading(false); } };
+function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "movements"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") loadStockRequests(); }
 window.switchTab = switchTab;
-
-el.productForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const payload = {
-    id: el.productId.value.trim(), barcode: el.barcode.value.trim(), name: el.name.value.trim(), productBrand: el.productBrand.value.trim(),
-    category: el.category.value.trim(), subCategory: el.subCategory.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(),
-    carType: el.carType.value.trim(), variant: el.variant.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim(),
-  };
-  if (!payload.name) return showToast("Ürün adı zorunlu", true);
-  try {
-    setLoading(true);
-    if (payload.id) {
-      const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id);
-      if (error) throw error;
-      showToast("Ürün güncellendi");
-    } else {
-      const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload));
-      if (error) throw error;
-      showToast("Ürün kaydedildi");
-    }
-    clearProductForm();
-    await loadProducts();
-  } catch (err) {
-    console.error(err);
-    showToast(err.message || "Ürün kaydedilemedi", true);
-  } finally { setLoading(false); }
-});
-
-el.clearProductBtn.addEventListener("click", clearProductForm);
-el.refreshBtn.addEventListener("click", loadAll);
-el.searchInput.addEventListener("input", applySearch);
-el.movementSearchInput.addEventListener("input", renderMovementSearchResults);
-el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
-
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error));
-}
-
-loadAll();
+function playNotifySound() { try { const AudioContext = window.AudioContext || window.webkitAudioContext; const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = "sine"; osc.frequency.value = 880; gain.gain.setValueAtTime(0.001, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.03); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45); osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.5); } catch (e) { console.warn("Ses çalınamadı", e); } }
+async function requestNotificationPermission() { if (!("Notification" in window)) { showToast("Bu tarayıcı bildirim desteklemiyor", true); return; } const result = await Notification.requestPermission(); showToast(result === "granted" ? "Bildirim izni açıldı ✅" : "Bildirim izni verilmedi", result !== "granted"); }
+function notifyNewRequest(req) { const message = "1 yeni sipariş var, uygulamayı kontrol et"; showToast(message + " ✅"); playNotifySound(); if ("Notification" in window && Notification.permission === "granted") { new Notification("Depo Talebi", { body: `${message}\nPlaka: ${req.plate || "-"}\nİstenen: ${req.requested_text || "-"}`, tag: "stock-request-" + req.id, renotify: true }); } }
+function initRealtimeNotifications() { if (state.realtimeReady) return; state.realtimeReady = true; supabaseClient.channel("stock_requests_insert_watch").on("postgres_changes", { event: "INSERT", schema: "public", table: "stock_requests" }, async (payload) => { const req = payload.new; if (!req || state.seenRequestIds.has(req.id)) return; state.seenRequestIds.add(req.id); notifyNewRequest(req); await loadStockRequests(); }).subscribe(); }
+el.productForm.addEventListener("submit", async (e) => { e.preventDefault(); const payload = { id: el.productId.value.trim(), barcode: el.barcode.value.trim(), productBrand: el.productBrand.value.trim(), category: el.category.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(), carType: el.carType.value.trim(), vehicleYear: el.vehicleYear.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim() }; if (!payload.category || !payload.carBrand || !payload.carModel) return showToast("Zorunlu alanlar: Ürün Kategorisi, Araç Markası, Araç Modeli", true); try { setLoading(true); if (payload.id) { const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id); if (error) throw error; showToast("Ürün güncellendi"); } else { const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload)); if (error) throw error; showToast("Ürün kaydedildi"); } clearProductForm(); await loadProducts(); } catch (err) { console.error(err); showToast(err.message || "Ürün kaydedilemedi", true); } finally { setLoading(false); } });
+el.clearProductBtn.addEventListener("click", clearProductForm); el.refreshBtn.addEventListener("click", loadAll); el.enableNotifyBtn.addEventListener("click", requestNotificationPermission); el.searchInput.addEventListener("input", applySearch); el.movementSearchInput.addEventListener("input", renderMovementSearchResults); el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
+if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
+switchTab("requests"); loadAll(); initRealtimeNotifications();
