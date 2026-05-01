@@ -25,7 +25,10 @@
         <button id="refreshBtn" class="btn secondary">Yenile</button>
       </div>
     </header>
-
+<div id="newRequestAlert" class="new-request-alert hidden">
+  🔴 <strong id="newRequestAlertText">Yeni depo talebi var</strong>
+  <button onclick="clearNewRequestAlert()">Gördüm</button>
+</div>
     <nav class="top-nav">
       <button id="nav-requests" onclick="switchTab('requests')">Depo</button>
       <button id="nav-search" onclick="switchTab('search')">Ara</button>
