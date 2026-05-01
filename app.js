@@ -102,12 +102,8 @@ window.openReservationPanel = function(requestId) {
 
   renderSelectedRequestDetail(req);
 
-  const vehicleText = requestVehicleText(req);
-  const searchText = [req.requested_text, req.vehicle_brand, req.vehicle_model, req.vehicle_type, req.vehicle_year]
-    .filter(Boolean)
-    .join(" ");
+el.productSearchInput.value = req.requested_text || "";
 
-  el.productSearchInput.value = searchText || req.requested_text || "";
   searchProductsForRequest(el.productSearchInput.value);
 };
 async function searchProductsForRequest(query = "") {
