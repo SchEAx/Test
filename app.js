@@ -45,7 +45,28 @@ function renderSelectedRequestDetail(req) {
     <div class="muted">${escapeHtml(vehicleText || "Araç bilgisi yok")}</div>
   `;
 }
+function updateNewRequestAlert() {
+  const alertBox = document.getElementById("newRequestAlert");
+  const alertText = document.getElementById("newRequestAlertText");
 
+  if (!alertBox || !alertText) return;
+
+  if (state.newRequestCount > 0) {
+    alertBox.classList.remove("hidden");
+    alertText.textContent = `${state.newRequestCount} yeni depo talebi var`;
+    document.title = `(${state.newRequestCount}) Depo Talebi`;
+  } else {
+    alertBox.classList.add("hidden");
+    document.title = state.originalTitle || "Stok Takip";
+  }
+}
+
+window.clearNewRequestAlert = function() {
+  state.newRequestCount = 0;
+  state.highlightRequestIds.clear();
+  updateNewRequestAlert();
+  renderStockRequests();
+};
 function setLoading(flag) { state.loading = flag; el.refreshBtn.disabled = flag; el.saveProductBtn.disabled = flag; el.movementSearchInput.disabled = flag; el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile"; el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet"; }
 
 async function loadProducts() { const { data, error } = await supabaseClient.from("stock_products").select("*").order("product_name", { ascending: true }); if (error) throw error; state.products = (data || []).map(mapProduct); applySearch(); updateStats(); }
@@ -76,7 +97,7 @@ function renderMovementSearchResults() {
 function renderStockRequests() {
   let list = state.stockRequests || []; if (state.requestFilter !== "all") list = list.filter(req => req.status === state.requestFilter);
   if (!list.length) { el.stockRequestsBox.innerHTML = `<div class="empty-state">Bu filtrede talep yok</div>`; return; }
-  el.stockRequestsBox.innerHTML = list.map((req) => `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge status-${escapeHtml(req.status || "bos")}">${formatRequestStatus(req.status)}</span></div><div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div><div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div><div>Araç: <strong>${escapeHtml([
+  el.stockRequestsBox.innerHTML = list.map((req) => `<div class="movement-item ${state.highlightRequestIds.has(req.id) ? "new-request-glow" : ""}"><div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge status-${escapeHtml(req.status || "bos")}">${formatRequestStatus(req.status)}</span></div><div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div><div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div><div>Araç: <strong>${escapeHtml([
   req.vehicle_brand,
   req.vehicle_model,
   req.vehicle_type
@@ -229,11 +250,37 @@ window.reserveProductForRequest = async function(productId) {
   try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); renderSelectedRequestDetail(stillSelected); searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
 };
 window.cancelReservation = async function(requestId) { if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.rpc("cancel_stock_reservation", { p_request_id: requestId }); if (error) throw error; showToast("Rezerv iptal edildi ✅"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Rezerv iptal edilemedi", true); } finally { setLoading(false); } };
-function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "movements"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") loadStockRequests(); }
+function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "movements"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") {
+  state.newRequestCount = 0;
+  updateNewRequestAlert();
+  loadStockRequests();
+} }
 window.switchTab = switchTab;
 function playNotifySound() { try { const AudioContext = window.AudioContext || window.webkitAudioContext; const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = "sine"; osc.frequency.value = 880; gain.gain.setValueAtTime(0.001, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.03); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45); osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.5); } catch (e) { console.warn("Ses çalınamadı", e); } }
 async function requestNotificationPermission() { if (!("Notification" in window)) { showToast("Bu tarayıcı bildirim desteklemiyor", true); return; } const result = await Notification.requestPermission(); showToast(result === "granted" ? "Bildirim izni açıldı ✅" : "Bildirim izni verilmedi", result !== "granted"); }
-function notifyNewRequest(req) { const message = "1 yeni sipariş var, uygulamayı kontrol et"; showToast(message + " ✅"); playNotifySound(); if ("Notification" in window && Notification.permission === "granted") { new Notification("Depo Talebi", { body: `${message}\nPlaka: ${req.plate || "-"}\nİstenen: ${req.requested_text || "-"}`, tag: "stock-request-" + req.id, renotify: true }); } }
+function notifyNewRequest(req) {
+  state.newRequestCount += 1;
+  state.highlightRequestIds.add(req.id);
+
+  updateNewRequestAlert();
+
+  if (typeof showToast === "function") {
+    showToast("Yeni depo talebi geldi ✅");
+  }
+
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("Depo Talebi", {
+      body: `1 yeni sipariş var\nPlaka: ${req.plate || "-"}\nİstenen: ${req.requested_text || "-"}`,
+      tag: "stock-request-" + req.id,
+      renotify: true
+    });
+  }
+
+  setTimeout(() => {
+    state.highlightRequestIds.delete(req.id);
+    renderStockRequests();
+  }, 15000);
+}
 function initRealtimeNotifications() { if (state.realtimeReady) return; state.realtimeReady = true; supabaseClient.channel("stock_requests_insert_watch").on("postgres_changes", { event: "INSERT", schema: "public", table: "stock_requests" }, async (payload) => { const req = payload.new; if (!req || state.seenRequestIds.has(req.id)) return; state.seenRequestIds.add(req.id); notifyNewRequest(req); await loadStockRequests(); }).subscribe(); }
 el.productForm.addEventListener("submit", async (e) => { e.preventDefault(); const payload = { id: el.productId.value.trim(), barcode: el.barcode.value.trim(), productBrand: el.productBrand.value.trim(), category: el.category.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(), carType: el.carType.value.trim(), vehicleYear: el.vehicleYear.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim() }; if (!payload.category || !payload.carBrand || !payload.carModel) return showToast("Zorunlu alanlar: Ürün Kategorisi, Araç Markası, Araç Modeli", true); try { setLoading(true); if (payload.id) { const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id); if (error) throw error; showToast("Ürün güncellendi"); } else { const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload)); if (error) throw error; showToast("Ürün kaydedildi"); } clearProductForm(); await loadProducts(); } catch (err) { console.error(err); showToast(err.message || "Ürün kaydedilemedi", true); } finally { setLoading(false); } });
 el.clearProductBtn.addEventListener("click", clearProductForm); el.refreshBtn.addEventListener("click", loadAll); el.enableNotifyBtn.addEventListener("click", requestNotificationPermission); el.searchInput.addEventListener("input", applySearch); el.movementSearchInput.addEventListener("input", renderMovementSearchResults); el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
