@@ -1,43 +1,49 @@
-const API_URL = "https://script.google.com/macros/s/AKfycbzI4RbRYqWrMLAoAEGYI9QrgDdRDgycXhDchid64w8RIdxkbT8JKoexCso1C3mdl1tY/exec";
+const SUPABASE_URL = "https://dmsovrbkoeivkvmlzals.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtc292cmJrb2Vpdmt2bWx6YWxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTg3NTMsImV4cCI6MjA5MjkzNDc1M30.Tf_8-AEkON4hvKsWiljiDV5z_LJW7KUebIkU-0R8x_A";
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const state = {
   products: [],
   filteredProducts: [],
   movements: [],
+  stockRequests: [],
   loading: false,
+  selectedStockRequestId: null,
 };
 
 const el = {
   totalProductCount: document.getElementById("totalProductCount"),
   totalStockCount: document.getElementById("totalStockCount"),
+  reservedStockCount: document.getElementById("reservedStockCount"),
   criticalStockCount: document.getElementById("criticalStockCount"),
-
   refreshBtn: document.getElementById("refreshBtn"),
-
   productForm: document.getElementById("productForm"),
   productId: document.getElementById("productId"),
   barcode: document.getElementById("barcode"),
-name: document.getElementById("name"),
-productBrand: document.getElementById("productBrand"),
-category: document.getElementById("category"),
-subCategory: document.getElementById("subCategory"),
-carBrand: document.getElementById("carBrand"),
-carModel: document.getElementById("carModel"),
-carType: document.getElementById("carType"),
-variant: document.getElementById("variant"),
-stock: document.getElementById("stock"),
-minStock: document.getElementById("minStock"),
-location: document.getElementById("location"),
-note: document.getElementById("note"),
+  name: document.getElementById("name"),
+  productBrand: document.getElementById("productBrand"),
+  category: document.getElementById("category"),
+  subCategory: document.getElementById("subCategory"),
+  carBrand: document.getElementById("carBrand"),
+  carModel: document.getElementById("carModel"),
+  carType: document.getElementById("carType"),
+  variant: document.getElementById("variant"),
+  stock: document.getElementById("stock"),
+  minStock: document.getElementById("minStock"),
+  location: document.getElementById("location"),
+  note: document.getElementById("note"),
   saveProductBtn: document.getElementById("saveProductBtn"),
   clearProductBtn: document.getElementById("clearProductBtn"),
-
   movementSearchInput: document.getElementById("movementSearchInput"),
-movementSearchList: document.getElementById("movementSearchList"),
-
+  movementSearchList: document.getElementById("movementSearchList"),
   searchInput: document.getElementById("searchInput"),
   productTableBody: document.getElementById("productTableBody"),
   movementList: document.getElementById("movementList"),
+  stockRequestsBox: document.getElementById("stockRequestsBox"),
+  reservationPanel: document.getElementById("reservationPanel"),
+  requestedTextBox: document.getElementById("requestedTextBox"),
+  productSearchInput: document.getElementById("productSearchInput"),
+  productMatchBox: document.getElementById("productMatchBox"),
   toast: document.getElementById("toast"),
 };
 
@@ -45,95 +51,115 @@ function showToast(message, isError = false) {
   el.toast.textContent = message;
   el.toast.classList.remove("hidden");
   el.toast.style.borderColor = isError ? "rgba(220,38,38,0.5)" : "rgba(22,163,74,0.5)";
-  setTimeout(() => el.toast.classList.add("hidden"), 2500);
+  setTimeout(() => el.toast.classList.add("hidden"), 3000);
 }
 
-function formatMoney(value) {
-  const num = Number(value || 0);
-  return num.toLocaleString("tr-TR", {
-    style: "currency",
-    currency: "TRY",
-    minimumFractionDigits: 2,
-  });
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 function formatDate(value) {
   if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("tr-TR");
+  return d.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
 }
 
-function calculateMovementTotal() {
-  const qty = Number(el.moveQuantity.value || 0);
-  const unitPrice = Number(el.moveUnitPrice.value || 0);
-  el.moveTotal.value = formatMoney(qty * unitPrice);
+function mapProduct(row) {
+  return {
+    id: row.id || "",
+    barcode: row.barcode || "",
+    name: row.product_name || "",
+    productBrand: row.product_brand || "",
+    category: row.category || "",
+    subCategory: row.sub_category || "",
+    carBrand: row.vehicle_brand || "",
+    carModel: row.vehicle_model || "",
+    carType: row.vehicle_type || "",
+    variant: row.variant || "",
+    stock: Number(row.quantity || 0),
+    reserved: Number(row.reserved_quantity || 0),
+    minStock: Number(row.min_stock || 0),
+    location: row.location || "",
+    note: row.note || "",
+    createdAt: row.created_at || "",
+  };
 }
 
-async function api(action, payload = {}) {
-  if (!API_URL || API_URL.includes("BURAYA_APPS_SCRIPT")) {
-    throw new Error("API_URL henüz tanımlanmadı.");
-  }
+function toProductRow(payload) {
+  return {
+    barcode: payload.barcode || null,
+    product_name: payload.name,
+    product_brand: payload.productBrand || null,
+    category: payload.category || null,
+    sub_category: payload.subCategory || null,
+    vehicle_brand: payload.carBrand || null,
+    vehicle_model: payload.carModel || null,
+    vehicle_type: payload.carType || null,
+    variant: payload.variant || null,
+    quantity: Number(payload.stock || 0),
+    min_stock: Number(payload.minStock || 0),
+    location: payload.location || null,
+    note: payload.note || null,
+  };
+}
 
-  const isReadAction = action === "listProducts" || action === "listMovements";
-
-  let res;
-
-  if (isReadAction) {
-    const query = new URLSearchParams({ action, ...payload }).toString();
-    res = await fetch(`${API_URL}?${query}`, {
-      method: "GET",
-    });
-  } else {
-    const formData = new URLSearchParams();
-    formData.append("action", action);
-
-    Object.entries(payload).forEach(([key, value]) => {
-      formData.append(key, value ?? "");
-    });
-
-    res = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-      },
-      body: formData.toString(),
-    });
-  }
-
-  const text = await res.text();
-
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error("Sunucudan JSON dönmedi: " + text);
-  }
-
-  if (!data.ok) {
-    throw new Error(data.message || "Bilinmeyen bir hata oluştu.");
-  }
-
-  return data;
+function setLoading(flag) {
+  state.loading = flag;
+  el.refreshBtn.disabled = flag;
+  el.saveProductBtn.disabled = flag;
+  el.movementSearchInput.disabled = flag;
+  el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile";
+  el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet";
 }
 
 async function loadProducts() {
-  const data = await api("listProducts");
-  state.products = Array.isArray(data.products) ? data.products : [];
+  const { data, error } = await supabaseClient
+    .from("stock_products")
+    .select("*")
+    .order("product_name", { ascending: true });
+  if (error) throw error;
+  state.products = (data || []).map(mapProduct);
   applySearch();
   updateStats();
 }
 
 async function loadMovements() {
-  const data = await api("listMovements");
-  state.movements = Array.isArray(data.movements) ? data.movements : [];
+  const { data, error } = await supabaseClient
+    .from("stock_movements")
+    .select("*, stock_products(product_name, barcode)")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  state.movements = data || [];
   renderMovements();
 }
+
+async function loadStockRequests() {
+  const { data, error } = await supabaseClient
+    .from("stock_requests")
+    .select("*")
+    .in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi"])
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) {
+    el.stockRequestsBox.innerHTML = `<div class="empty-state">Talep alınamadı: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  state.stockRequests = data || [];
+  renderStockRequests();
+}
+window.loadStockRequests = loadStockRequests;
 
 async function loadAll() {
   try {
     setLoading(true);
-    await Promise.all([loadProducts(), loadMovements()]);
+    await Promise.all([loadProducts(), loadMovements(), loadStockRequests()]);
   } catch (err) {
     console.error(err);
     showToast(err.message || "Veriler yüklenemedi", true);
@@ -142,83 +168,54 @@ async function loadAll() {
   }
 }
 
-function setLoading(flag) {
-  state.loading = flag;
-  el.refreshBtn.disabled = flag;
-  el.saveProductBtn.disabled = flag;
-  el.movementSearchInput.disabled = flag;
-
-  el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile";
-  el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet";
-}
-
 function updateStats() {
   const totalProduct = state.products.length;
   const totalStock = state.products.reduce((sum, p) => sum + Number(p.stock || 0), 0);
-  const critical = state.products.filter((p) => Number(p.stock || 0) <= Number(p.minStock || 0)).length;
-
+  const reserved = state.products.reduce((sum, p) => sum + Number(p.reserved || 0), 0);
+  const critical = state.products.filter((p) => (Number(p.stock || 0) - Number(p.reserved || 0)) <= Number(p.minStock || 0)).length;
   el.totalProductCount.textContent = totalProduct;
   el.totalStockCount.textContent = totalStock;
+  el.reservedStockCount.textContent = reserved;
   el.criticalStockCount.textContent = critical;
+}
+
+function productSearchText(p) {
+  return [p.barcode, p.name, p.productBrand, p.category, p.subCategory, p.carBrand, p.carModel, p.carType, p.variant, p.location].join(" ").toLowerCase();
 }
 
 function applySearch() {
   const q = (el.searchInput.value || "").trim().toLowerCase();
-
-  state.filteredProducts = state.products.filter((p) => {
-    const text = [
-      p.name,
-      p.productBrand,
-      p.category,
-      p.subCategory,
-      p.carBrand,
-      p.carModel,
-      p.carType,
-      p.variant
-    ].join(" ").toLowerCase();
-
-    return text.includes(q);
-  });
-
+  state.filteredProducts = q ? state.products.filter((p) => productSearchText(p).includes(q)) : state.products;
   renderProducts();
 }
 
 function renderProducts() {
   if (!state.filteredProducts.length) {
-    el.productTableBody.innerHTML = `
-      <tr>
-        <td colspan="13" class="empty-cell">Kayıt bulunamadı</td>
-      </tr>
-    `;
+    el.productTableBody.innerHTML = `<tr><td colspan="15" class="empty-cell">Kayıt bulunamadı</td></tr>`;
     return;
   }
-
   el.productTableBody.innerHTML = state.filteredProducts.map((p) => {
-  const isLow = Number(p.stock || 0) <= Number(p.minStock || 0);
-
-  return `
-    <tr>
-      <td>${escapeHtml(p.barcode || "-")}</td>
-      <td>${escapeHtml(p.name || "-")}</td>
-      <td>${escapeHtml(p.productBrand || "-")}</td>
-      <td>${escapeHtml(p.category || "-")}</td>
-      <td>${escapeHtml(p.subCategory || "-")}</td>
-      <td>${escapeHtml(p.carBrand || "-")}</td>
-      <td>${escapeHtml(p.carModel || "-")}</td>
-      <td>${escapeHtml(p.carType || "-")}</td>
-      <td>${escapeHtml(p.variant || "-")}</td>
-      <td class="${isLow ? "low-stock" : ""}">${Number(p.stock || 0)}</td>
-      <td>${Number(p.minStock || 0)}</td>
-      <td>${escapeHtml(p.location || "-")}</td>
-      <td>
-        <div class="action-group">
-          <button class="action-btn edit" onclick="editProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Düzenle</button>
-          <button class="action-btn delete" onclick="deleteProduct('${String(p.id || "").replace(/'/g, "\\'")}')">Sil</button>
-        </div>
-      </td>
-    </tr>
-  `;
-}).join("");
+    const available = Number(p.stock || 0) - Number(p.reserved || 0);
+    const isLow = available <= Number(p.minStock || 0);
+    return `
+      <tr>
+        <td>${escapeHtml(p.barcode || "-")}</td>
+        <td>${escapeHtml(p.name || "-")}</td>
+        <td>${escapeHtml(p.productBrand || "-")}</td>
+        <td>${escapeHtml(p.category || "-")}</td>
+        <td>${escapeHtml(p.subCategory || "-")}</td>
+        <td>${escapeHtml(p.carBrand || "-")}</td>
+        <td>${escapeHtml(p.carModel || "-")}</td>
+        <td>${escapeHtml(p.carType || "-")}</td>
+        <td>${escapeHtml(p.variant || "-")}</td>
+        <td>${Number(p.stock || 0)}</td>
+        <td>${Number(p.reserved || 0)}</td>
+        <td class="${isLow ? "low-stock" : ""}">${available}</td>
+        <td>${Number(p.minStock || 0)}</td>
+        <td>${escapeHtml(p.location || "-")}</td>
+        <td><div class="action-group"><button class="action-btn edit" onclick="editProduct('${p.id}')">Düzenle</button><button class="action-btn delete" onclick="deleteProduct('${p.id}')">Sil</button></div></td>
+      </tr>`;
+  }).join("");
 }
 
 function renderMovements() {
@@ -226,102 +223,61 @@ function renderMovements() {
     el.movementList.innerHTML = `<div class="empty-state">Henüz hareket yok</div>`;
     return;
   }
-
   el.movementList.innerHTML = state.movements.map((m) => {
-    const typeClass = (m.type || "").toUpperCase() === "GIRIS" ? "giris" : "cikis";
-    const typeLabel = (m.type || "").toUpperCase() === "GIRIS" ? "Giriş" : "Çıkış";
-
+    const productName = m.stock_products?.product_name || m.description || "-";
+    const barcode = m.stock_products?.barcode || "-";
+    const type = String(m.movement_type || "").toLowerCase();
+    const typeClass = type.includes("giris") || type.includes("rezerv") && !type.includes("iptal") ? "giris" : "cikis";
     return `
       <div class="movement-item">
-        <div class="movement-top">
-          <div>
-            <strong>${escapeHtml(m.name || "-")}</strong>
-            <div class="muted">${escapeHtml(m.barcode || "-")}</div>
-          </div>
-          <div>
-            <span class="badge ${typeClass}">${typeLabel}</span>
-          </div>
-        </div>
-
+        <div class="movement-top"><div><strong>${escapeHtml(productName)}</strong><div class="muted">${escapeHtml(barcode)}</div></div><span class="badge ${typeClass}">${escapeHtml(m.movement_type || "-")}</span></div>
         <div>Miktar: <strong>${Number(m.quantity || 0)}</strong></div>
-        <div>Birim Fiyat: <strong>${formatMoney(m.unitPrice || 0)}</strong></div>
-        <div>Tutar: <strong>${formatMoney(m.total || 0)}</strong></div>
-        <div>Tarih: <strong>${formatDate(m.date)}</strong></div>
-        <div>Not: <strong>${escapeHtml(m.note || "-")}</strong></div>
-      </div>
-    `;
+        <div>Plaka: <strong>${escapeHtml(m.plate || "-")}</strong></div>
+        <div>Kayıt No: <strong>${escapeHtml(m.record_no || "-")}</strong></div>
+        <div>Tarih: <strong>${formatDate(m.created_at)}</strong></div>
+        <div>Not: <strong>${escapeHtml(m.description || "-")}</strong></div>
+      </div>`;
   }).join("");
 }
+
 function renderMovementSearchResults() {
   const q = (el.movementSearchInput.value || "").trim().toLowerCase();
-
   if (!q) {
     el.movementSearchList.innerHTML = `<div class="empty-state">Arama yaparak ürün seç</div>`;
     return;
   }
-
-  const results = state.products.filter((p) => {
-    const text = [
-      p.name,
-      p.productBrand,
-      p.category,
-      p.subCategory,
-      p.carBrand,
-      p.carModel,
-      p.carType,
-      p.variant,
-      p.barcode
-    ].join(" ").toLowerCase();
-
-    return text.includes(q);
-  });
-
+  const results = state.products.filter((p) => productSearchText(p).includes(q)).slice(0, 30);
   if (!results.length) {
     el.movementSearchList.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
     return;
   }
+  el.movementSearchList.innerHTML = results.map((p) => {
+    const available = Number(p.stock || 0) - Number(p.reserved || 0);
+    return `
+      <div class="movement-search-item">
+        <div class="movement-search-info"><strong>${escapeHtml(p.name || "-")}</strong><div class="muted">${escapeHtml(p.category || "-")} / ${escapeHtml(p.subCategory || "-")}</div><div class="muted">${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "-")} ${escapeHtml(p.variant || "")}</div><div class="muted">Barkod: ${escapeHtml(p.barcode || "-")} | Stok: <strong>${p.stock}</strong> | Rezerve: <strong>${p.reserved}</strong> | Kullanılabilir: <strong>${available}</strong></div></div>
+        <div class="movement-search-actions"><button class="btn success" onclick="quickStockAction('${p.id}', 'giris')">Giriş</button><button class="btn danger" onclick="quickStockAction('${p.id}', 'cikis')">Çıkış</button></div>
+      </div>`;
+  }).join("");
+}
 
-  el.movementSearchList.innerHTML = results.map((p) => `
-    <div class="movement-search-item">
-      <div class="movement-search-info">
-        <strong>${escapeHtml(p.name || "-")}</strong>
-        <div class="muted">${escapeHtml(p.category || "-")} / ${escapeHtml(p.subCategory || "-")}</div>
-        <div class="muted">
-          ${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "-")} ${escapeHtml(p.variant || "")}
-        </div>
-        <div class="muted">
-          Barkod: ${escapeHtml(p.barcode || "-")} | Stok: <strong>${Number(p.stock || 0)}</strong>
-        </div>
-      </div>
-
-      <div class="movement-search-actions">
-        <button class="btn success" onclick="quickStockAction('${String(p.id || "").replace(/'/g, "\\'")}', 'GIRIS')">Giriş</button>
-        <button class="btn danger" onclick="quickStockAction('${String(p.id || "").replace(/'/g, "\\'")}', 'CIKIS')">Çıkış</button>
-      </div>
-    </div>
-  `).join("");
+function renderStockRequests() {
+  if (!state.stockRequests.length) {
+    el.stockRequestsBox.innerHTML = `<div class="empty-state">Bekleyen depo talebi yok</div>`;
+    return;
+  }
+  el.stockRequestsBox.innerHTML = state.stockRequests.map((req) => `
+    <div class="movement-item">
+      <div class="movement-top"><div><strong>${escapeHtml(req.plate || "Plaka yok")}</strong><div class="muted">${escapeHtml(req.customer_name || "-")}</div></div><span class="badge ${req.status === "bekliyor" ? "cikis" : "giris"}">${escapeHtml(req.status)}</span></div>
+      <div>Usta: <strong>${escapeHtml(req.technician_name || "-")}</strong></div>
+      <div>İstenen: <strong>${escapeHtml(req.requested_text || "-")}</strong></div>
+      <div>Tarih: <strong>${formatDate(req.created_at)}</strong></div>
+      <div class="row-gap" style="margin-top:10px;"><button class="btn primary" onclick="openReservationPanel('${req.id}')">Ürün Eşleştir</button></div>
+    </div>`).join("");
 }
 
 function clearProductForm() {
-  el.productId.value = "";
-  el.barcode.value = "";
-  el.name.value = "";
-  el.productBrand.value = "";
-  el.category.value = "";
-  el.subCategory.value = "";
-  el.carBrand.value = "";
-  el.carModel.value = "";
-  el.carType.value = "";
-  el.variant.value = "";
-  el.stock.value = "";
-  el.minStock.value = "";
-  el.location.value = "";
-  el.note.value = "";
-}
-
-function clearMovementForm() {
-  el.movementSearchInput.value = "";
-  el.movementSearchList.innerHTML = `<div class="empty-state">Arama yaparak ürün seç</div>`;
+  [el.productId, el.barcode, el.name, el.productBrand, el.category, el.subCategory, el.carBrand, el.carModel, el.carType, el.variant, el.stock, el.minStock, el.location, el.note].forEach((x) => x.value = "");
 }
 
 function fillProductForm(product) {
@@ -339,159 +295,158 @@ function fillProductForm(product) {
   el.minStock.value = product.minStock ?? "";
   el.location.value = product.location || "";
   el.note.value = product.note || "";
+  switchTab("add");
   window.scrollTo({ top: 0, behavior: "smooth" });
-}
-
-function findProductByBarcode(barcode) {
-  return state.products.find((p) => String(p.barcode || "").trim() === String(barcode || "").trim());
 }
 
 window.editProduct = function(id) {
   const product = state.products.find((p) => String(p.id) === String(id));
-  if (!product) {
-    showToast("Ürün bulunamadı", true);
-    return;
-  }
+  if (!product) return showToast("Ürün bulunamadı", true);
   fillProductForm(product);
 };
 
 window.deleteProduct = async function(id) {
-  const ok = confirm("Bu ürünü silmek istediğine emin misin?");
-  if (!ok) return;
-
+  if (!confirm("Bu ürünü silmek istediğine emin misin?")) return;
   try {
     setLoading(true);
-    await api("deleteProduct", { id });
+    const { error } = await supabaseClient.from("stock_products").delete().eq("id", id);
+    if (error) throw error;
     showToast("Ürün silindi");
     await loadAll();
   } catch (err) {
     console.error(err);
     showToast(err.message || "Ürün silinemedi", true);
-  } finally {
-    setLoading(false);
-  }
+  } finally { setLoading(false); }
 };
+
 window.quickStockAction = async function(id, type) {
   const product = state.products.find((p) => String(p.id) === String(id));
-
-  if (!product) {
-    showToast("Ürün bulunamadı", true);
-    return;
-  }
-
-  const qtyText = prompt(
-    `${product.name} için ${type === "GIRIS" ? "giriş" : "çıkış"} miktarı gir:`,
-    "1"
-  );
-
+  if (!product) return showToast("Ürün bulunamadı", true);
+  const qtyText = prompt(`${product.name} için ${type === "giris" ? "giriş" : "çıkış"} miktarı gir:`, "1");
   if (qtyText === null) return;
-
   const quantity = Number(qtyText);
-  if (!quantity || quantity <= 0) {
-    showToast("Geçerli bir miktar gir", true);
-    return;
-  }
-
-  const ok = confirm(
-    `${product.name} için ${quantity} adet ${type === "GIRIS" ? "giriş" : "çıkış"} yapılsın mı?`
-  );
-
-  if (!ok) return;
-
+  if (!quantity || quantity <= 0) return showToast("Geçerli miktar gir", true);
+  const available = Number(product.stock || 0) - Number(product.reserved || 0);
+  if (type === "cikis" && available < quantity) return showToast(`Yeterli kullanılabilir stok yok. Kullanılabilir: ${available}`, true);
+  if (!confirm(`${product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
   try {
     setLoading(true);
-
-    await api("saveMovement", {
-      barcode: product.barcode || "",
-      name: product.name || "",
-      type,
+    const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity;
+    const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id);
+    if (updateError) throw updateError;
+    const { error: movementError } = await supabaseClient.from("stock_movements").insert({
+      product_id: id,
+      movement_type: type,
       quantity,
-      unitPrice: 0,
-      note: `Hızlı ${type === "GIRIS" ? "giriş" : "çıkış"}`
+      description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}`
     });
-
-    showToast(`${product.name} için hareket kaydedildi`);
+    if (movementError) throw movementError;
+    showToast("Hareket kaydedildi");
     await loadAll();
     renderMovementSearchResults();
   } catch (err) {
     console.error(err);
     showToast(err.message || "Hareket kaydedilemedi", true);
-  } finally {
-    setLoading(false);
-  }
+  } finally { setLoading(false); }
 };
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+
+window.openReservationPanel = function(requestId) {
+  const req = state.stockRequests.find((r) => String(r.id) === String(requestId));
+  if (!req) return showToast("Talep bulunamadı", true);
+  state.selectedStockRequestId = requestId;
+  el.reservationPanel.classList.remove("hidden");
+  el.requestedTextBox.textContent = req.requested_text || "-";
+  el.productSearchInput.value = req.requested_text || "";
+  searchProductsForRequest(el.productSearchInput.value);
+};
+
+async function searchProductsForRequest(query = "") {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) {
+    el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`;
+    return;
+  }
+  const results = state.products.filter((p) => productSearchText(p).includes(q)).slice(0, 25);
+  if (!results.length) {
+    el.productMatchBox.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
+    return;
+  }
+  el.productMatchBox.innerHTML = results.map((p) => {
+    const available = Number(p.stock || 0) - Number(p.reserved || 0);
+    return `
+      <div class="movement-search-item">
+        <div class="movement-search-info"><strong>${escapeHtml(p.name || "-")}</strong><div class="muted">${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "-")} ${escapeHtml(p.variant || "")}</div><div class="muted">Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir: <strong>${available}</strong></div></div>
+        <div class="movement-search-actions"><input id="qty_${p.id}" type="number" value="1" min="1" style="max-width:90px" /><button class="btn primary" onclick="reserveProductForRequest('${p.id}')">Rezerve Et</button></div>
+      </div>`;
+  }).join("");
 }
+
+window.reserveProductForRequest = async function(productId) {
+  if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true);
+  const quantity = Number(document.getElementById("qty_" + productId)?.value || 1);
+  if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
+  const deliveredTo = prompt("Ürün kime teslim edildi? Örn: Mehmet Usta", "");
+  try {
+    setLoading(true);
+    const { error } = await supabaseClient.rpc("reserve_stock_for_request", {
+      p_request_id: state.selectedStockRequestId,
+      p_product_id: productId,
+      p_quantity: quantity,
+      p_delivered_to: deliveredTo || ""
+    });
+    if (error) throw error;
+    showToast("Stok rezerve edildi ✅");
+    state.selectedStockRequestId = null;
+    el.reservationPanel.classList.add("hidden");
+    await loadAll();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message || "Rezerve edilemedi", true);
+  } finally { setLoading(false); }
+};
+
+function switchTab(tab) {
+  ["search", "add", "requests", "movements"].forEach((key) => document.getElementById("page-" + key).classList.add("hidden"));
+  document.getElementById("page-" + tab).classList.remove("hidden");
+  if (tab === "requests") loadStockRequests();
+}
+window.switchTab = switchTab;
 
 el.productForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
-const payload = {
-  id: el.productId.value.trim(),
-  barcode: el.barcode.value.trim(),
-  name: el.name.value.trim(),
-  productBrand: el.productBrand.value.trim(),
-  category: el.category.value.trim(),
-  subCategory: el.subCategory.value.trim(),
-  carBrand: el.carBrand.value.trim(),
-  carModel: el.carModel.value.trim(),
-  carType: el.carType.value.trim(),
-  variant: el.variant.value.trim(),
-  stock: el.stock.value.trim(),
-  minStock: el.minStock.value.trim(),
-  location: el.location.value.trim(),
-  note: el.note.value.trim(),
-};
-
+  const payload = {
+    id: el.productId.value.trim(), barcode: el.barcode.value.trim(), name: el.name.value.trim(), productBrand: el.productBrand.value.trim(),
+    category: el.category.value.trim(), subCategory: el.subCategory.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(),
+    carType: el.carType.value.trim(), variant: el.variant.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim(),
+  };
   if (!payload.name) return showToast("Ürün adı zorunlu", true);
-
   try {
     setLoading(true);
-    await api("saveProduct", payload);
-    showToast(payload.id ? "Ürün güncellendi" : "Ürün kaydedildi");
+    if (payload.id) {
+      const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id);
+      if (error) throw error;
+      showToast("Ürün güncellendi");
+    } else {
+      const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload));
+      if (error) throw error;
+      showToast("Ürün kaydedildi");
+    }
     clearProductForm();
     await loadProducts();
   } catch (err) {
     console.error(err);
     showToast(err.message || "Ürün kaydedilemedi", true);
-  } finally {
-    setLoading(false);
-  }
+  } finally { setLoading(false); }
 });
 
-
 el.clearProductBtn.addEventListener("click", clearProductForm);
-
 el.refreshBtn.addEventListener("click", loadAll);
 el.searchInput.addEventListener("input", applySearch);
 el.movementSearchInput.addEventListener("input", renderMovementSearchResults);
-
-el.moveBarcode.addEventListener("change", () => {
-  const product = findProductByBarcode(el.moveBarcode.value);
-  if (product) {
-    el.moveName.value = product.name || "";
-  }
-});
+el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(console.error);
-  });
-}
-function switchTab(tab) {
-  document.getElementById("page-search").classList.add("hidden");
-  document.getElementById("page-add").classList.add("hidden");
-  document.getElementById("page-movements").classList.add("hidden");
-
-  document.getElementById("page-" + tab).classList.remove("hidden");
+  window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error));
 }
 
-
-clearMovementForm();
 loadAll();
