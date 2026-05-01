@@ -103,13 +103,26 @@ window.openReservationPanel = function(requestId) {
   renderSelectedRequestDetail(req);
 
 el.productSearchInput.value = req.requested_text || "";
-
-  searchProductsForRequest(el.productSearchInput.value);
+searchProductsForRequest(req.requested_text || "", true);
 };
-async function searchProductsForRequest(query = "") {
+async function searchProductsForRequest(query = "", autoSuggest = false) {
   const q = String(query || "").trim().toLowerCase();
 
-  if (!q) {
+  const selectedReq = state.stockRequests.find(
+    r => String(r.id) === String(state.selectedStockRequestId)
+  );
+
+  const autoText = [
+    selectedReq?.requested_text,
+    selectedReq?.vehicle_brand,
+    selectedReq?.vehicle_model,
+    selectedReq?.vehicle_type,
+    selectedReq?.vehicle_year
+  ].filter(Boolean).join(" ");
+
+  const searchSource = autoSuggest ? autoText : q;
+
+  if (!searchSource.trim()) {
     el.productMatchBox.innerHTML = `<div class="empty-state">Ürün aramak için yazmaya başla</div>`;
     return;
   }
@@ -123,7 +136,7 @@ async function searchProductsForRequest(query = "") {
   const reqType = String(selectedReq?.vehicle_type || "").trim().toLowerCase();
   const reqYear = String(selectedReq?.vehicle_year || "").trim().toLowerCase();
 
-  const words = q
+ const words = searchSource
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .split(/\s+/)
     .filter(w => w.length >= 2);
@@ -138,7 +151,7 @@ async function searchProductsForRequest(query = "") {
         if (text.includes(w)) score += 2;
       });
 
-      if (text.includes(q)) score += 8;
+     if (q && text.includes(q)) score += 8;
 
       // Araç markası eşleşmesi çok önemli
       if (reqBrand && String(p.carBrand || "").toLowerCase().includes(reqBrand)) {
@@ -187,15 +200,20 @@ async function searchProductsForRequest(query = "") {
             ${escapeHtml(p.modelYear || "")}
           </div>
           <div class="muted">
-            Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir: <strong>${available}</strong>
+            Stok: ${p.stock} | Rezerve: ${p.reserved} | Kullanılabilir:
+<strong class="${available <= 0 ? "stock-warning" : ""}">${available}</strong>
           </div>
         </div>
 
         <div class="movement-search-actions">
           <input id="qty_${p.id}" type="number" value="1" min="1" style="max-width:90px" />
-          <button class="btn primary" onclick="reserveProductForRequest('${p.id}')">
-            Rezerve Et
-          </button>
+         <button
+  class="btn primary"
+  onclick="reserveProductForRequest('${p.id}')"
+  ${available <= 0 ? "disabled" : ""}
+>
+  ${available <= 0 ? "Stok Yok" : "Rezerve Et"}
+</button>
         </div>
       </div>
     `;
