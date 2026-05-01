@@ -4,7 +4,9 @@ const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const state = {
   products: [], filteredProducts: [], movements: [], stockRequests: [], requestFilter: "all",
-  activeTab: "requests", loading: false, selectedStockRequestId: null, seenRequestIds: new Set(), realtimeReady: false
+  activeTab: "requests", loading: false, selectedStockRequestId: null, seenRequestIds: new Set(), realtimeReady: false, newRequestCount: 0,
+highlightRequestIds: new Set(),
+originalTitle: document.title,
 };
 
 const el = {
