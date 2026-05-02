@@ -1,4 +1,4 @@
-const CACHE_NAME = "stok-takip-v5";
+const CACHE_NAME = "stok-takip-v6";
 const ASSETS = ["./", "./index.html", "./style.css", "./app.js", "./manifest.webmanifest", "./logo.png"];
 
 self.addEventListener("install", (event) => {
@@ -29,6 +29,15 @@ self.addEventListener("fetch", (event) => {
     }).catch(() => caches.match("./index.html")));
     return;
   }
+  const ASSETS = [
+  "./",
+  "./index.html",
+  "./style.css",
+  "./app.js",
+  "./manifest.webmanifest",
+  "./logo.png",
+  "./notification.mp3"
+];
 
   event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
 });
