@@ -38,6 +38,36 @@ self.addEventListener("fetch", (event) => {
   "./logo.png",
   "./notification.mp3"
 ];
+  self.addEventListener("push", (event) => {
+  let data = {
+    title: "Depo Talebi",
+    body: "1 yeni sipariş var, uygulamayı kontrol et",
+    url: "/"
+  };
+
+  try {
+    data = event.data.json();
+  } catch {}
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Depo Talebi", {
+      body: data.body || "1 yeni sipariş var",
+      icon: "/logo.png",
+      badge: "/logo.png",
+      data: {
+        url: data.url || "/"
+      }
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+
+  event.waitUntil(
+    clients.openWindow(event.notification.data?.url || "/")
+  );
+});
 
   event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
 });
