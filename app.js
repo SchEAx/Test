@@ -29,6 +29,17 @@ function buildProductName(row) { return [row.product_brand, row.category, row.ve
 function mapProduct(row) {
   return { id: row.id || "", barcode: row.barcode || "", name: row.product_name || buildProductName(row), productBrand: row.product_brand || "", category: row.category || "", carBrand: row.vehicle_brand || "", carModel: row.vehicle_model || "", carType: row.vehicle_type || "", vehicleYear: row.vehicle_year || "", stock: Number(row.quantity || 0), reserved: Number(row.reserved_quantity || 0), minStock: Number(row.min_stock || 0), location: row.location || "", note: row.note || "", createdAt: row.created_at || "" };
 }
+function playNotificationSound() {
+  try {
+    const audio = new Audio("./notification.mp3");
+    audio.volume = 1;
+    audio.play().catch((err) => {
+      console.warn("Ses otomatik çalınamadı:", err);
+    });
+  } catch (err) {
+    console.warn("Bildirim sesi hatası:", err);
+  }
+}
 function toProductRow(payload) {
   const productName = [payload.productBrand, payload.category, payload.carBrand, payload.carModel, payload.carType, payload.vehicleYear].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
   return { barcode: payload.barcode || null, product_name: productName || payload.category, product_brand: payload.productBrand || null, category: payload.category || null, vehicle_brand: payload.carBrand || null, vehicle_model: payload.carModel || null, vehicle_type: payload.carType || null, vehicle_year: payload.vehicleYear || null, quantity: Number(payload.stock || 0), min_stock: Number(payload.minStock || 0), location: payload.location || null, note: payload.note || null };
@@ -263,6 +274,7 @@ function notifyNewRequest(req) {
   state.highlightRequestIds.add(req.id);
 
   updateNewRequestAlert();
+  playNotificationSound();
 
   if (typeof showToast === "function") {
     showToast("Yeni depo talebi geldi ✅");
