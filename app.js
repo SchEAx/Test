@@ -317,7 +317,8 @@ window.updateSaleCartItem = function(productId, key, value) {
     item.price = String(value || "").replace(",", ".");
   }
 
-  renderSaleCart();
+  // Input yazarken sepeti komple render etme; render odak kaçırıyor.
+  updateSaleTotalDisplay();
 };
 
 window.removeSaleCartItem = function(productId) {
@@ -327,6 +328,12 @@ window.removeSaleCartItem = function(productId) {
 
 function saleCartTotal() {
   return state.saleCart.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+}
+
+function updateSaleTotalDisplay() {
+  if (el.saleTotal) {
+    el.saleTotal.textContent = formatSaleMoney(saleCartTotal());
+  }
 }
 
 function renderSaleCart() {
@@ -345,8 +352,8 @@ function renderSaleCart() {
         <div class="sale-cart-meta">${escapeHtml(item.detail || "-")}</div>
       </div>
       <div class="sale-cart-actions">
-        <input type="number" min="1" step="1" value="${Number(item.qty || 1)}" onchange="updateSaleCartItem('${item.productId}', 'qty', this.value)" />
-        <input type="number" min="0" step="0.01" placeholder="Fiyat" value="${escapeHtml(item.price)}" onchange="updateSaleCartItem('${item.productId}', 'price', this.value)" oninput="updateSaleCartItem('${item.productId}', 'price', this.value)" />
+        <input type="number" min="1" step="1" value="${Number(item.qty || 1)}" oninput="updateSaleCartItem('${item.productId}', 'qty', this.value)" />
+        <input type="number" min="0" step="0.01" placeholder="Fiyat" value="${escapeHtml(item.price)}" oninput="updateSaleCartItem('${item.productId}', 'price', this.value)" />
         <button class="btn danger" onclick="removeSaleCartItem('${item.productId}')">Sil</button>
       </div>
     </div>
