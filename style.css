@@ -56,3 +56,9 @@
 }
 .brand-wrap{display:flex;align-items:center;gap:12px}.app-logo{width:52px;height:52px;border-radius:14px;object-fit:contain;background:rgba(255,255,255,.04);border:1px solid var(--border);padding:6px}
 @media(max-width:640px){.brand-wrap{align-items:flex-start}.app-logo{width:46px;height:46px}.top-actions{width:100%}.top-actions .btn{flex:1}}
+
+
+/* Grup 1 - hızlı seçim ve imza rozeti */
+.powered-badge{position:fixed;top:10px;right:14px;z-index:9999;display:inline-flex;align-items:center;gap:5px;padding:9px 13px;border:1px solid rgba(245,158,11,.45);border-radius:14px;background:rgba(2,6,23,.74);color:#f8fafc;font-size:12px;font-weight:800;letter-spacing:.02em;box-shadow:0 10px 25px rgba(0,0,0,.35),0 0 18px rgba(245,158,11,.12);backdrop-filter:blur(10px)}
+.powered-badge strong{color:#fff}.powered-badge span{color:#f87171}.field-hint{display:block;margin-top:6px;color:var(--muted);font-size:11px;line-height:1.35}
+@media(max-width:760px){.powered-badge{position:static;margin:10px auto 0;width:max-content;max-width:calc(100% - 24px);font-size:11px}.app-shell{margin-top:12px}}
