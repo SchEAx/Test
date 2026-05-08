@@ -126,7 +126,7 @@ window.clearNewRequestAlert = function() {
 };
 function setLoading(flag) { state.loading = flag; el.refreshBtn.disabled = flag; el.saveProductBtn.disabled = flag; el.movementSearchInput.disabled = flag; el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile"; el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet"; }
 
-async function loadProducts() { const { data, error } = await supabaseClient.from("stock_products").select("*").order("product_name", { ascending: true }); if (error) throw error; state.products = (data || []).map(mapProduct); applySearch(); updateStats(); }
+async function loadProducts() { const { data, error } = await supabaseClient.from("stock_products").select("*").order("product_name", { ascending: true }); if (error) throw error; state.products = (data || []).map(mapProduct); applySearch(); updateStats(); refreshProductQuickLists(); }
 async function loadMovements() { const { data, error } = await supabaseClient.from("stock_movements").select("*, stock_products(product_name, barcode)").order("created_at", { ascending: false }).limit(100); if (error) throw error; state.movements = data || []; renderMovements(); }
 async function loadStockRequests() {
   const { data, error } = await supabaseClient.from("stock_requests").select("*").in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi", "montaj_bitti", "iptal"]).order("created_at", { ascending: false }).limit(150);
@@ -136,6 +136,26 @@ async function loadStockRequests() {
 window.loadStockRequests = loadStockRequests;
 async function loadAll() { try { setLoading(true); await Promise.all([loadProducts(), loadMovements(), loadStockRequests()]); } catch (err) { console.error(err); showToast(err.message || "Veriler yüklenemedi", true); } finally { setLoading(false); } }
 function updateStats() { const totalProduct = state.products.length; const totalStock = state.products.reduce((sum, p) => sum + Number(p.stock || 0), 0); const reserved = state.products.reduce((sum, p) => sum + Number(p.reserved || 0), 0); const critical = state.products.filter((p) => (Number(p.stock || 0) - Number(p.reserved || 0)) <= Number(p.minStock || 0)).length; el.totalProductCount.textContent = totalProduct; el.totalStockCount.textContent = totalStock; el.reservedStockCount.textContent = reserved; el.criticalStockCount.textContent = critical; }
+function uniqueCleanValues(values) {
+  return [...new Set((values || []).map(v => String(v || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "tr"));
+}
+function setDatalistOptions(id, values) {
+  const list = document.getElementById(id);
+  if (!list) return;
+  list.innerHTML = uniqueCleanValues(values)
+    .map(v => `<option value="${escapeHtml(v)}"></option>`)
+    .join("");
+}
+function refreshProductQuickLists() {
+  setDatalistOptions("productBrandList", state.products.map(p => p.productBrand));
+  setDatalistOptions("categoryList", state.products.map(p => p.category));
+  setDatalistOptions("carBrandList", state.products.map(p => p.carBrand));
+  setDatalistOptions("carModelList", state.products.map(p => p.carModel));
+  setDatalistOptions("carTypeList", state.products.map(p => p.carType));
+  setDatalistOptions("locationList", state.products.map(p => p.location));
+}
+
 function productSearchText(p) { return normalizeText([p.name, p.productBrand, p.category, p.carBrand, p.carModel, p.carType, p.vehicleYear, p.location, p.note].join(" ")); }
 function applySearch() { const q = normalizeText(el.searchInput.value); state.filteredProducts = q ? state.products.filter((p) => productSearchText(p).includes(q)) : state.products; renderProducts(); }
 function renderProducts() {
