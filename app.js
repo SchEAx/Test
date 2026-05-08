@@ -37,43 +37,75 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
 }
 
+function updateNotifyButtonUI(isWorking = false) {
+  if (!el.enableNotifyBtn) return;
+
+  if (isWorking) {
+    el.enableNotifyBtn.textContent = "Bildirim Açılıyor...";
+    el.enableNotifyBtn.disabled = true;
+    return;
+  }
+
+  if ("Notification" in window && Notification.permission === "granted") {
+    el.enableNotifyBtn.textContent = "Bildirim Açık ✅";
+    el.enableNotifyBtn.classList.remove("ghost");
+    el.enableNotifyBtn.classList.add("success");
+    el.enableNotifyBtn.disabled = true;
+  } else {
+    el.enableNotifyBtn.textContent = "Bildirim Aç";
+    el.enableNotifyBtn.classList.remove("success");
+    el.enableNotifyBtn.classList.add("ghost");
+    el.enableNotifyBtn.disabled = false;
+  }
+}
+
 async function enablePushNotifications() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    showToast("Bu cihaz push bildirim desteklemiyor", true);
-    return;
-  }
+  try {
+    updateNotifyButtonUI(true);
 
-  const permission = await Notification.requestPermission();
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      showToast("Bu cihaz push bildirim desteklemiyor", true);
+      updateNotifyButtonUI(false);
+      return;
+    }
 
-  if (permission !== "granted") {
-    showToast("Bildirim izni verilmedi", true);
-    return;
-  }
+    const permission = await Notification.requestPermission();
 
-  const registration = await navigator.serviceWorker.ready;
+    if (permission !== "granted") {
+      showToast("Bildirim izni verilmedi", true);
+      updateNotifyButtonUI(false);
+      return;
+    }
 
-  let subscription = await registration.pushManager.getSubscription();
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
 
-  if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+    }
+
+    const res = await fetch("/api/subscribe-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription)
     });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      throw new Error(data.message || "Push aboneliği kaydedilemedi");
+    }
+
+    updateNotifyButtonUI(false);
+    showToast("Bildirim açık ✅");
+  } catch (err) {
+    console.error("Bildirim açma hatası:", err);
+    updateNotifyButtonUI(false);
+    showToast(err.message || "Bildirim açılamadı", true);
   }
-
-  const res = await fetch("/api/subscribe-push", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(subscription)
-  });
-
-  const data = await res.json();
-
-  if (!data.ok) {
-    throw new Error(data.message || "Push aboneliği kaydedilemedi");
-  }
-
-  showToast("Telefon bildirimi aktif ✅");
 }
 function playNotificationSound() {
   try {
@@ -333,6 +365,69 @@ function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "
   loadStockRequests();
 } }
 window.switchTab = switchTab;
+function showUpdateNotice(newVersion) {
+  if (document.getElementById("updateNotice")) return;
+
+  const notice = document.createElement("div");
+  notice.id = "updateNotice";
+  notice.className = "update-notice";
+  notice.innerHTML = `⚡ Yeni sürüm hazır <strong>${escapeHtml(newVersion || "")}</strong><span>Güncellemek için tıkla</span>`;
+
+  notice.addEventListener("click", async () => {
+    notice.innerHTML = "⚡ Güncelleniyor...";
+
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(key => caches.delete(key)));
+      }
+
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(reg => reg.unregister()));
+      }
+
+      localStorage.setItem("stok_app_version", String(newVersion || Date.now()));
+    } catch (err) {
+      console.warn("Güncelleme temizliği yapılamadı:", err);
+    }
+
+    window.location.reload(true);
+  });
+
+  document.body.appendChild(notice);
+  showToast("Yeni sürüm mevcut ⚡ Sağ alttaki uyarıya tıkla.");
+}
+
+async function checkAppVersion() {
+  try {
+    const res = await fetch("./version.json?_=" + Date.now(), { cache: "no-store" });
+    if (!res.ok) return;
+
+    const data = await res.json();
+    const remoteVersion = String(data.version || "").trim();
+    if (!remoteVersion) return;
+
+    const localVersion = localStorage.getItem("stok_app_version");
+
+    if (!localVersion) {
+      localStorage.setItem("stok_app_version", remoteVersion);
+      return;
+    }
+
+    if (localVersion !== remoteVersion) {
+      showUpdateNotice(remoteVersion);
+    }
+  } catch (err) {
+    console.warn("Sürüm kontrolü yapılamadı:", err);
+  }
+}
+
+function initUpdateChecker() {
+  checkAppVersion();
+  setInterval(checkAppVersion, 60 * 1000);
+}
+
 function playNotifySound() { try { const AudioContext = window.AudioContext || window.webkitAudioContext; const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = "sine"; osc.frequency.value = 880; gain.gain.setValueAtTime(0.001, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.03); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45); osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.5); } catch (e) { console.warn("Ses çalınamadı", e); } }
 async function requestNotificationPermission() { if (!("Notification" in window)) { showToast("Bu tarayıcı bildirim desteklemiyor", true); return; } const result = await Notification.requestPermission(); showToast(result === "granted" ? "Bildirim izni açıldı ✅" : "Bildirim izni verilmedi", result !== "granted"); }
 function notifyNewRequest(req) {
@@ -409,4 +504,4 @@ function notifyNewRequest(req) {
 el.productForm.addEventListener("submit", async (e) => { e.preventDefault(); const payload = { id: el.productId.value.trim(), barcode: el.barcode.value.trim(), productBrand: el.productBrand.value.trim(), category: el.category.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(), carType: el.carType.value.trim(), vehicleYear: el.vehicleYear.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim() }; if (!payload.category || !payload.carBrand || !payload.carModel) return showToast("Zorunlu alanlar: Ürün Kategorisi, Araç Markası, Araç Modeli", true); try { setLoading(true); if (payload.id) { const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id); if (error) throw error; showToast("Ürün güncellendi"); } else { const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload)); if (error) throw error; showToast("Ürün kaydedildi"); } clearProductForm(); await loadProducts(); } catch (err) { console.error(err); showToast(err.message || "Ürün kaydedilemedi", true); } finally { setLoading(false); } });
 el.clearProductBtn.addEventListener("click", clearProductForm); el.refreshBtn.addEventListener("click", loadAll); el.enableNotifyBtn.addEventListener("click", enablePushNotifications); el.searchInput.addEventListener("input", applySearch); el.movementSearchInput.addEventListener("input", renderMovementSearchResults); el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
-switchTab("requests"); loadAll(); initRealtimeNotifications();
+switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
