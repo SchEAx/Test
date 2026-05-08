@@ -1,4 +1,4 @@
-const CACHE_NAME = "stok-takip-v6";
+const CACHE_NAME = "stok-takip-v7-grup1";
 const ASSETS = ["./", "./index.html", "./style.css", "./app.js", "./manifest.webmanifest", "./logo.png"];
 
 self.addEventListener("install", (event) => {
