@@ -1,4 +1,4 @@
-const CACHE_NAME = "stok-takip-v8-hizli-satis";
+const CACHE_NAME = "stok-takip-v9-hizli-satis-focus-fix";
 const ASSETS = [
   "./",
   "./index.html",
