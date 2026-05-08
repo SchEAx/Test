@@ -11,7 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="powered-badge" title="Garage İstanbul Systems">⚡ Powered By <strong>GPT</strong> & <span>SchEAx</span></div>
+  <div class="powered-badge">⚡ Powered By <span>GPT</span> & <b>SchEAx</b></div>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand-wrap">
@@ -35,6 +35,7 @@
       <button id="nav-search" onclick="switchTab('search')">Ara</button>
       <button id="nav-add" onclick="switchTab('add')">Ürün Ekle</button>
       <button id="nav-movements" onclick="switchTab('movements')">Hareketler</button>
+      <button id="nav-sale" onclick="switchTab('sale')">Hızlı Satış</button>
     </nav>
 
     <section class="stats-grid stats-grid-4">
@@ -93,30 +94,88 @@
           <form id="productForm" class="form-grid">
             <input type="hidden" id="productId" />
             <input type="hidden" id="barcode" />
-            <div><label>Ürün Markası</label><input id="productBrand" list="productBrandList" type="text" placeholder="Seç veya yeni marka yaz" /><small class="field-hint">Listede yoksa direkt yazıp kaydedebilirsin.</small></div>
-            <div><label>Ürün Kategorisi *</label><input id="category" list="categoryList" type="text" placeholder="Seç veya yeni kategori yaz" /><small class="field-hint">Örn: Paspas, Cam Rüzgarlığı</small></div>
-            <div><label>Araç Markası *</label><input id="carBrand" list="carBrandList" type="text" placeholder="Seç veya yeni araç markası yaz" /></div>
-            <div><label>Araç Modeli *</label><input id="carModel" list="carModelList" type="text" placeholder="Seç veya yeni model yaz" /></div>
-            <div><label>Araç Tipi</label><input id="carType" list="carTypeList" type="text" placeholder="Seç veya yeni tip yaz" /></div>
+            <div><label>Ürün Markası</label><input id="productBrand" type="text" list="productBrandList" placeholder="Örn: Rizline" /></div>
+            <div><label>Ürün Kategorisi *</label><input id="category" type="text" list="categoryList" placeholder="Örn: Paspas, Cam Rüzgarlığı" /></div>
+            <div><label>Araç Markası *</label><input id="carBrand" type="text" list="carBrandList" placeholder="Örn: Renault" /></div>
+            <div><label>Araç Modeli *</label><input id="carModel" type="text" list="carModelList" placeholder="Örn: Megane 4" /></div>
+            <div><label>Araç Tipi</label><input id="carType" type="text" list="carTypeList" placeholder="Örn: HB / Sedan / SUV" /></div>
             <div><label>Araç Model Yılı</label><input id="vehicleYear" type="text" placeholder="Örn: 2016-2020" /></div>
             <div><label>Mevcut Stok</label><input id="stock" type="number" min="0" step="1" placeholder="0" /></div>
             <div><label>Minimum Stok</label><input id="minStock" type="number" min="0" step="1" placeholder="0" /></div>
-            <div><label>Raf / Konum</label><input id="location" list="locationList" type="text" placeholder="Seç veya yeni raf yaz" /></div>
+            <div><label>Raf / Konum</label><input id="location" type="text" list="locationList" placeholder="Örn: A-12" /></div>
             <div class="full"><label>Açıklama <span class="muted">(isteğe bağlı)</span></label><textarea id="note" rows="3" placeholder="İsteğe bağlı not"></textarea></div>
             <div class="full row-gap"><button type="submit" id="saveProductBtn" class="btn primary">Ürünü Kaydet</button><button type="button" id="clearProductBtn" class="btn ghost">Formu Temizle</button></div>
           </form>
-          <datalist id="productBrandList"></datalist>
-          <datalist id="categoryList"></datalist>
-          <datalist id="carBrandList"></datalist>
-          <datalist id="carModelList"></datalist>
-          <datalist id="carTypeList"></datalist>
-          <datalist id="locationList"></datalist>
         </div>
 
         <div class="card">
           <h2>Stok Giriş / Çıkış</h2>
           <div class="form-grid"><div class="full"><label>Ürün Ara</label><input id="movementSearchInput" type="text" placeholder="Örn: Megane, paspas, rizline..." /></div></div>
           <div id="movementSearchList" class="movement-search-list"><div class="empty-state">Arama yaparak ürün seç</div></div>
+        </div>
+      </section>
+    </div>
+
+    <div id="page-sale" class="page hidden">
+      <section class="sale-grid">
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <h2>Hızlı Satış</h2>
+              <p class="muted">Ürünü seç, adet ve fiyat gir, satışı tamamla</p>
+            </div>
+            <button class="btn secondary" onclick="clearSaleCart()">Sepeti Temizle</button>
+          </div>
+
+          <div class="form-grid">
+            <div class="full">
+              <label>Ürün / Barkod Ara</label>
+              <input id="saleSearchInput" type="text" placeholder="Barkod, paspas, Megane, Rizline..." />
+            </div>
+          </div>
+
+          <div id="saleProductList" class="sale-product-list">
+            <div class="empty-state">Satışa ürün eklemek için arama yap</div>
+          </div>
+        </div>
+
+        <div class="card sale-cart-card">
+          <div class="section-head">
+            <div>
+              <h2>Satış Sepeti</h2>
+              <p class="muted">Fiyat müşteriye göre elle girilir</p>
+            </div>
+          </div>
+
+          <div id="saleCartList" class="sale-cart-list">
+            <div class="empty-state">Sepet boş</div>
+          </div>
+
+          <div class="sale-summary">
+            <div>Toplam</div>
+            <strong id="saleTotal">₺0,00</strong>
+          </div>
+
+          <div class="form-grid">
+            <div>
+              <label>Ödeme Tipi</label>
+              <select id="salePaymentType">
+                <option value="Nakit">Nakit</option>
+                <option value="Kart">Kart</option>
+                <option value="Kısmi Ödeme">Kısmi Ödeme</option>
+                <option value="Ödeme Yok">Ödeme Yok</option>
+              </select>
+            </div>
+            <div>
+              <label>Satış Notu</label>
+              <input id="saleCustomerNote" type="text" placeholder="İsteğe bağlı" />
+            </div>
+          </div>
+
+          <div class="row-gap sale-actions">
+            <button id="completeSaleBtn" class="btn success" type="button">Satışı Tamamla</button>
+            <button id="clearSaleBtn" class="btn ghost" type="button">Temizle</button>
+          </div>
         </div>
       </section>
     </div>
