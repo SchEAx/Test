@@ -62,3 +62,34 @@
 .powered-badge{position:fixed;top:10px;right:14px;z-index:9999;display:inline-flex;align-items:center;gap:5px;padding:9px 13px;border:1px solid rgba(245,158,11,.45);border-radius:14px;background:rgba(2,6,23,.74);color:#f8fafc;font-size:12px;font-weight:800;letter-spacing:.02em;box-shadow:0 10px 25px rgba(0,0,0,.35),0 0 18px rgba(245,158,11,.12);backdrop-filter:blur(10px)}
 .powered-badge strong{color:#fff}.powered-badge span{color:#f87171}.field-hint{display:block;margin-top:6px;color:var(--muted);font-size:11px;line-height:1.35}
 @media(max-width:760px){.powered-badge{position:static;margin:10px auto 0;width:max-content;max-width:calc(100% - 24px);font-size:11px}.app-shell{margin-top:12px}}
+
+
+/* Grup 2 - güncelleme uyarısı */
+.update-notice{
+  position:fixed;
+  right:18px;
+  bottom:18px;
+  z-index:10000;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  max-width:min(420px,calc(100vw - 28px));
+  padding:13px 16px;
+  border:1px solid rgba(245,158,11,.65);
+  border-radius:18px;
+  background:linear-gradient(135deg,rgba(15,23,42,.98),rgba(2,6,23,.98));
+  color:#fff;
+  font-size:14px;
+  font-weight:800;
+  box-shadow:0 16px 45px rgba(0,0,0,.45),0 0 26px rgba(245,158,11,.16);
+  cursor:pointer;
+  user-select:none;
+  animation:updateNoticePulse 1.8s ease-in-out infinite;
+}
+.update-notice strong{color:#fbbf24;font-weight:900}
+.update-notice span{color:#cbd5e1;font-size:12px;font-weight:700}
+@keyframes updateNoticePulse{
+  0%,100%{transform:translateY(0);box-shadow:0 16px 45px rgba(0,0,0,.45),0 0 20px rgba(245,158,11,.14)}
+  50%{transform:translateY(-2px);box-shadow:0 18px 55px rgba(0,0,0,.55),0 0 34px rgba(245,158,11,.28)}
+}
+@media (max-width:720px){.update-notice{left:14px;right:14px;bottom:14px;justify-content:center;flex-wrap:wrap;text-align:center}}
