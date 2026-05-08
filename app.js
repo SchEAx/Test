@@ -338,8 +338,54 @@ function notifyNewRequest(req) {
     state.highlightRequestIds.delete(req.id);
     renderStockRequests();
   }, 15000);
+}function initRealtimeNotifications() {
+  if (state.realtimeReady) return;
+  state.realtimeReady = true;
+
+  supabaseClient
+    .channel("stock_requests_watch")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "stock_requests" },
+      async (payload) => {
+        const req = payload.new;
+        if (!req || state.seenRequestIds.has(req.id)) return;
+
+        state.seenRequestIds.add(req.id);
+        notifyNewRequest(req);
+        await loadStockRequests();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "stock_requests" },
+      async (payload) => {
+        const updatedReq = payload.new;
+        if (!updatedReq) return;
+
+        const index = state.stockRequests.findIndex(
+          r => String(r.id) === String(updatedReq.id)
+        );
+
+        if (index >= 0) {
+          state.stockRequests[index] = updatedReq;
+        } else {
+          state.stockRequests.unshift(updatedReq);
+        }
+
+        renderStockRequests();
+
+        if (String(state.selectedStockRequestId) === String(updatedReq.id)) {
+          renderSelectedRequestDetail(updatedReq);
+          el.productSearchInput.value = updatedReq.requested_text || "";
+          searchProductsForRequest(updatedReq.requested_text || "", true);
+        }
+
+        showToast("Depo talebi güncellendi ✅");
+      }
+    )
+    .subscribe();
 }
-function initRealtimeNotifications() { if (state.realtimeReady) return; state.realtimeReady = true; supabaseClient.channel("stock_requests_insert_watch").on("postgres_changes", { event: "INSERT", schema: "public", table: "stock_requests" }, async (payload) => { const req = payload.new; if (!req || state.seenRequestIds.has(req.id)) return; state.seenRequestIds.add(req.id); notifyNewRequest(req); await loadStockRequests(); }).subscribe(); }
 el.productForm.addEventListener("submit", async (e) => { e.preventDefault(); const payload = { id: el.productId.value.trim(), barcode: el.barcode.value.trim(), productBrand: el.productBrand.value.trim(), category: el.category.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(), carType: el.carType.value.trim(), vehicleYear: el.vehicleYear.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim() }; if (!payload.category || !payload.carBrand || !payload.carModel) return showToast("Zorunlu alanlar: Ürün Kategorisi, Araç Markası, Araç Modeli", true); try { setLoading(true); if (payload.id) { const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id); if (error) throw error; showToast("Ürün güncellendi"); } else { const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload)); if (error) throw error; showToast("Ürün kaydedildi"); } clearProductForm(); await loadProducts(); } catch (err) { console.error(err); showToast(err.message || "Ürün kaydedilemedi", true); } finally { setLoading(false); } });
 el.clearProductBtn.addEventListener("click", clearProductForm); el.refreshBtn.addEventListener("click", loadAll); el.enableNotifyBtn.addEventListener("click", enablePushNotifications); el.searchInput.addEventListener("input", applySearch); el.movementSearchInput.addEventListener("input", renderMovementSearchResults); el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
