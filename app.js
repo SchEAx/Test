@@ -8,6 +8,7 @@ const state = {
   activeTab: "requests", loading: false, selectedStockRequestId: null, seenRequestIds: new Set(), realtimeReady: false, newRequestCount: 0,
 highlightRequestIds: new Set(),
 originalTitle: document.title,
+  saleCart: [],
 };
 
 const el = {
@@ -15,7 +16,8 @@ const el = {
   refreshBtn: document.getElementById("refreshBtn"), enableNotifyBtn: document.getElementById("enableNotifyBtn"), productForm: document.getElementById("productForm"), productId: document.getElementById("productId"), barcode: document.getElementById("barcode"),
   productBrand: document.getElementById("productBrand"), category: document.getElementById("category"), carBrand: document.getElementById("carBrand"), carModel: document.getElementById("carModel"), carType: document.getElementById("carType"), vehicleYear: document.getElementById("vehicleYear"), stock: document.getElementById("stock"), minStock: document.getElementById("minStock"), location: document.getElementById("location"), note: document.getElementById("note"),
   saveProductBtn: document.getElementById("saveProductBtn"), clearProductBtn: document.getElementById("clearProductBtn"), movementSearchInput: document.getElementById("movementSearchInput"), movementSearchList: document.getElementById("movementSearchList"), searchInput: document.getElementById("searchInput"), productTableBody: document.getElementById("productTableBody"), movementList: document.getElementById("movementList"),
-  stockRequestsBox: document.getElementById("stockRequestsBox"), reservationPanel: document.getElementById("reservationPanel"), requestedTextBox: document.getElementById("requestedTextBox"), productSearchInput: document.getElementById("productSearchInput"), productMatchBox: document.getElementById("productMatchBox"), toast: document.getElementById("toast")
+  stockRequestsBox: document.getElementById("stockRequestsBox"), reservationPanel: document.getElementById("reservationPanel"), requestedTextBox: document.getElementById("requestedTextBox"), productSearchInput: document.getElementById("productSearchInput"), productMatchBox: document.getElementById("productMatchBox"), toast: document.getElementById("toast"),
+  saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn")
 };
 
 function showToast(message, isError = false) {
@@ -158,7 +160,7 @@ window.clearNewRequestAlert = function() {
 };
 function setLoading(flag) { state.loading = flag; el.refreshBtn.disabled = flag; el.saveProductBtn.disabled = flag; el.movementSearchInput.disabled = flag; el.refreshBtn.textContent = flag ? "Yükleniyor..." : "Yenile"; el.saveProductBtn.textContent = flag ? "Kaydediliyor..." : "Ürünü Kaydet"; }
 
-async function loadProducts() { const { data, error } = await supabaseClient.from("stock_products").select("*").order("product_name", { ascending: true }); if (error) throw error; state.products = (data || []).map(mapProduct); applySearch(); updateStats(); refreshProductQuickLists(); }
+async function loadProducts() { const { data, error } = await supabaseClient.from("stock_products").select("*").order("product_name", { ascending: true }); if (error) throw error; state.products = (data || []).map(mapProduct); applySearch(); updateStats(); refreshProductQuickLists(); if (typeof renderSaleProducts === "function") renderSaleProducts(); }
 async function loadMovements() { const { data, error } = await supabaseClient.from("stock_movements").select("*, stock_products(product_name, barcode)").order("created_at", { ascending: false }).limit(100); if (error) throw error; state.movements = data || []; renderMovements(); }
 async function loadStockRequests() {
   const { data, error } = await supabaseClient.from("stock_requests").select("*").in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi", "montaj_bitti", "iptal"]).order("created_at", { ascending: false }).limit(150);
@@ -225,6 +227,199 @@ window.quickStockAction = async function(id, type) {
   if (!confirm(`${product.category || product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
   try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}` }); if (movementError) throw movementError; showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
 };
+
+function formatSaleMoney(value) {
+  return new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    maximumFractionDigits: 2
+  }).format(Number(value || 0));
+}
+
+function saleAvailable(product) {
+  return Number(product?.stock || 0) - Number(product?.reserved || 0);
+}
+
+function renderSaleProducts() {
+  if (!el.saleProductList) return;
+
+  const q = normalizeText(el.saleSearchInput?.value || "");
+  if (!q) {
+    el.saleProductList.innerHTML = `<div class="empty-state">Satışa ürün eklemek için arama yap</div>`;
+    return;
+  }
+
+  const results = state.products
+    .filter((p) => productSearchText(p).includes(q) || normalizeText(p.barcode).includes(q))
+    .slice(0, 40);
+
+  if (!results.length) {
+    el.saleProductList.innerHTML = `<div class="empty-state">Eşleşen ürün bulunamadı</div>`;
+    return;
+  }
+
+  el.saleProductList.innerHTML = results.map((p) => {
+    const available = saleAvailable(p);
+    return `
+      <div class="sale-product-item">
+        <div>
+          <div class="sale-product-title">${escapeHtml(p.category || p.name || "-")}</div>
+          <div class="sale-product-meta">
+            ${escapeHtml(p.productBrand || "-")} / ${escapeHtml(p.carBrand || "-")} ${escapeHtml(p.carModel || "-")} ${escapeHtml(p.carType || "")} ${escapeHtml(p.vehicleYear || "")}<br>
+            Barkod: ${escapeHtml(p.barcode || "-")} · Raf: ${escapeHtml(p.location || "-")} · Kullanılabilir: <strong class="${available <= 0 ? "stock-warning" : ""}">${available}</strong>
+          </div>
+        </div>
+        <div class="sale-product-actions">
+          <button class="btn primary" onclick="addToSaleCart('${p.id}')" ${available <= 0 ? "disabled" : ""}>Sepete Ekle</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+window.addToSaleCart = function(productId) {
+  const product = state.products.find((p) => String(p.id) === String(productId));
+  if (!product) return showToast("Ürün bulunamadı", true);
+
+  const available = saleAvailable(product);
+  if (available <= 0) return showToast("Bu üründe kullanılabilir stok yok", true);
+
+  const existing = state.saleCart.find((item) => String(item.productId) === String(productId));
+  if (existing) {
+    if (Number(existing.qty || 0) + 1 > available) return showToast(`Yeterli stok yok. Kullanılabilir: ${available}`, true);
+    existing.qty = Number(existing.qty || 0) + 1;
+  } else {
+    state.saleCart.push({
+      productId: product.id,
+      name: product.category || product.name || "Ürün",
+      detail: [product.productBrand, product.carBrand, product.carModel, product.carType, product.vehicleYear].filter(Boolean).join(" "),
+      qty: 1,
+      price: ""
+    });
+  }
+
+  renderSaleCart();
+  showToast("Ürün sepete eklendi ✅");
+};
+
+window.updateSaleCartItem = function(productId, key, value) {
+  const item = state.saleCart.find((x) => String(x.productId) === String(productId));
+  if (!item) return;
+
+  if (key === "qty") {
+    const product = state.products.find((p) => String(p.id) === String(productId));
+    const available = saleAvailable(product);
+    const qty = Math.max(1, Math.floor(Number(value || 1)));
+    item.qty = Math.min(qty, available || qty);
+  }
+
+  if (key === "price") {
+    item.price = String(value || "").replace(",", ".");
+  }
+
+  renderSaleCart();
+};
+
+window.removeSaleCartItem = function(productId) {
+  state.saleCart = state.saleCart.filter((x) => String(x.productId) !== String(productId));
+  renderSaleCart();
+};
+
+function saleCartTotal() {
+  return state.saleCart.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.price || 0)), 0);
+}
+
+function renderSaleCart() {
+  if (!el.saleCartList) return;
+
+  if (!state.saleCart.length) {
+    el.saleCartList.innerHTML = `<div class="empty-state">Sepet boş</div>`;
+    if (el.saleTotal) el.saleTotal.textContent = formatSaleMoney(0);
+    return;
+  }
+
+  el.saleCartList.innerHTML = state.saleCart.map((item) => `
+    <div class="sale-cart-item">
+      <div>
+        <div class="sale-cart-title">${escapeHtml(item.name)}</div>
+        <div class="sale-cart-meta">${escapeHtml(item.detail || "-")}</div>
+      </div>
+      <div class="sale-cart-actions">
+        <input type="number" min="1" step="1" value="${Number(item.qty || 1)}" onchange="updateSaleCartItem('${item.productId}', 'qty', this.value)" />
+        <input type="number" min="0" step="0.01" placeholder="Fiyat" value="${escapeHtml(item.price)}" onchange="updateSaleCartItem('${item.productId}', 'price', this.value)" oninput="updateSaleCartItem('${item.productId}', 'price', this.value)" />
+        <button class="btn danger" onclick="removeSaleCartItem('${item.productId}')">Sil</button>
+      </div>
+    </div>
+  `).join("");
+
+  if (el.saleTotal) el.saleTotal.textContent = formatSaleMoney(saleCartTotal());
+}
+
+window.clearSaleCart = function() {
+  state.saleCart = [];
+  if (el.saleCustomerNote) el.saleCustomerNote.value = "";
+  renderSaleCart();
+};
+
+async function completeQuickSale() {
+  if (!state.saleCart.length) return showToast("Sepet boş", true);
+
+  const missingPrice = state.saleCart.find((item) => Number(item.price || 0) <= 0);
+  if (missingPrice) return showToast("Sepette fiyatı girilmeyen ürün var", true);
+
+  for (const item of state.saleCart) {
+    const product = state.products.find((p) => String(p.id) === String(item.productId));
+    const available = saleAvailable(product);
+    if (!product) return showToast(`${item.name} ürünü bulunamadı`, true);
+    if (available < Number(item.qty || 0)) return showToast(`${item.name} için stok yetersiz. Kullanılabilir: ${available}`, true);
+  }
+
+  const total = saleCartTotal();
+  const paymentType = el.salePaymentType?.value || "Nakit";
+  const note = String(el.saleCustomerNote?.value || "").trim();
+
+  if (!confirm(`${state.saleCart.length} kalem satış tamamlanacak. Toplam: ${formatSaleMoney(total)}\nDevam edilsin mi?`)) return;
+
+  try {
+    setLoading(true);
+
+    for (const item of state.saleCart) {
+      const product = state.products.find((p) => String(p.id) === String(item.productId));
+      const newQty = Number(product.stock || 0) - Number(item.qty || 0);
+
+      const { error: updateError } = await supabaseClient
+        .from("stock_products")
+        .update({ quantity: newQty })
+        .eq("id", item.productId);
+
+      if (updateError) throw updateError;
+
+      const desc = `Hızlı satış (${paymentType}) - Birim: ${formatSaleMoney(item.price)} - Toplam: ${formatSaleMoney(Number(item.qty || 0) * Number(item.price || 0))}${note ? " - Not: " + note : ""}`;
+
+      const { error: movementError } = await supabaseClient
+        .from("stock_movements")
+        .insert({
+          product_id: item.productId,
+          movement_type: "hizli_satis",
+          quantity: Number(item.qty || 0),
+          description: desc
+        });
+
+      if (movementError) throw movementError;
+    }
+
+    showToast(`Satış tamamlandı ✅ Toplam: ${formatSaleMoney(total)}`);
+    clearSaleCart();
+    await loadAll();
+    renderSaleProducts();
+  } catch (err) {
+    console.error("Hızlı satış hatası:", err);
+    showToast(err.message || "Satış tamamlanamadı", true);
+  } finally {
+    setLoading(false);
+  }
+}
+
 window.openReservationPanel = function(requestId) {
   const req = state.stockRequests.find((r) => String(r.id) === String(requestId));
   if (!req) return showToast("Talep bulunamadı", true);
@@ -359,10 +554,14 @@ window.reserveProductForRequest = async function(productId) {
   try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); renderSelectedRequestDetail(stillSelected); searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
 };
 window.cancelReservation = async function(requestId) { if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.rpc("cancel_stock_reservation", { p_request_id: requestId }); if (error) throw error; showToast("Rezerv iptal edildi ✅"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Rezerv iptal edilemedi", true); } finally { setLoading(false); } };
-function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "movements"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") {
+function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "movements", "sale"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") {
   state.newRequestCount = 0;
   updateNewRequestAlert();
   loadStockRequests();
+}
+if (tab === "sale") {
+  renderSaleProducts();
+  renderSaleCart();
 } }
 window.switchTab = switchTab;
 function showUpdateNotice(newVersion) {
@@ -503,5 +702,8 @@ function notifyNewRequest(req) {
 }
 el.productForm.addEventListener("submit", async (e) => { e.preventDefault(); const payload = { id: el.productId.value.trim(), barcode: el.barcode.value.trim(), productBrand: el.productBrand.value.trim(), category: el.category.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(), carType: el.carType.value.trim(), vehicleYear: el.vehicleYear.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim() }; if (!payload.category || !payload.carBrand || !payload.carModel) return showToast("Zorunlu alanlar: Ürün Kategorisi, Araç Markası, Araç Modeli", true); try { setLoading(true); if (payload.id) { const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id); if (error) throw error; showToast("Ürün güncellendi"); } else { const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload)); if (error) throw error; showToast("Ürün kaydedildi"); } clearProductForm(); await loadProducts(); } catch (err) { console.error(err); showToast(err.message || "Ürün kaydedilemedi", true); } finally { setLoading(false); } });
 el.clearProductBtn.addEventListener("click", clearProductForm); el.refreshBtn.addEventListener("click", loadAll); el.enableNotifyBtn.addEventListener("click", enablePushNotifications); el.searchInput.addEventListener("input", applySearch); el.movementSearchInput.addEventListener("input", renderMovementSearchResults); el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
+if (el.saleSearchInput) el.saleSearchInput.addEventListener("input", renderSaleProducts);
+if (el.completeSaleBtn) el.completeSaleBtn.addEventListener("click", completeQuickSale);
+if (el.clearSaleBtn) el.clearSaleBtn.addEventListener("click", clearSaleCart);
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
 switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
