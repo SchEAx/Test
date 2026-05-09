@@ -178,7 +178,20 @@ async function loadMovements() { const { data, error } = await supabaseClient.fr
 async function loadStockRequests() {
   const { data, error } = await supabaseClient.from("stock_requests").select("*").in("status", ["bekliyor", "rezerve_edildi", "teslim_edildi", "montaj_bitti", "iptal"]).order("created_at", { ascending: false }).limit(150);
   if (error) { el.stockRequestsBox.innerHTML = `<div class="empty-state">Talep alınamadı: ${escapeHtml(error.message)}</div>`; return; }
-  state.stockRequests = data || []; state.stockRequests.forEach((r) => state.seenRequestIds.add(r.id)); renderStockRequests();
+  state.stockRequests = data || []; const todayTR = new Date().toLocaleDateString("tr-TR", {
+  timeZone: "Europe/Istanbul"
+});
+
+state.stockRequests = state.stockRequests.filter(req => {
+  if (req.status !== "montaj_bitti") return true;
+
+  const reqDateTR = new Date(req.created_at).toLocaleDateString("tr-TR", {
+    timeZone: "Europe/Istanbul"
+  });
+
+  return reqDateTR === todayTR;
+});
+  state.stockRequests.forEach((r) => state.seenRequestIds.add(r.id)); renderStockRequests();
 }
 window.loadStockRequests = loadStockRequests;
 async function loadAll() { try { setLoading(true); await Promise.all([loadProducts(), loadMovements(), loadStockRequests()]); } catch (err) { console.error(err); showToast(err.message || "Veriler yüklenemedi", true); } finally { setLoading(false); } }
