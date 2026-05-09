@@ -142,6 +142,9 @@
             <button type="button" onclick="setSaleFavoriteSearch('xenon')">Xenon</button>
             <button type="button" onclick="setSaleFavoriteSearch('sensör')">Sensör</button>
           </div>
+          <div class="row-gap favorite-edit-row">
+            <button type="button" class="btn secondary" onclick="openSaleFavoritesEditor()">⚙️ Favorileri Düzenle</button>
+          </div>
 
           <div class="form-grid">
             <div class="full">
@@ -167,6 +170,18 @@
               <h2>Satış Sepeti</h2>
               <p class="muted">Fiyat müşteriye göre elle girilir</p>
             </div>
+          </div>
+
+          <div class="staff-panel">
+            <div>
+              <label>Aktif Personel</label>
+              <select id="currentStaffSelect"></select>
+            </div>
+            <div>
+              <label>Yetki</label>
+              <div id="staffRoleBadge" class="staff-role-badge">-</div>
+            </div>
+            <button type="button" class="btn secondary" onclick="openStaffEditor()">⚙️ Personel Yönetimi</button>
           </div>
 
           <div id="saleCartList" class="sale-cart-list">
@@ -206,6 +221,40 @@
 
     <div id="page-movements" class="page hidden">
       <section class="card"><div class="section-head"><div><h2>Son Hareketler</h2><p class="muted">Giriş / çıkış / rezerv geçmişi</p></div></div><div id="movementList" class="movement-list"><div class="empty-state">Henüz hareket yok</div></div></section>
+    </div>
+  </div>
+
+
+  <div id="saleFavoriteEditor" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="section-head compact">
+        <h2>Favori Satış Butonları</h2>
+        <button type="button" class="btn ghost" onclick="closeSaleFavoritesEditor()">Kapat</button>
+      </div>
+      <p class="muted">Her satıra bir buton adı yaz. Örn: Paspas, LED, Bagaj Havuzu</p>
+      <textarea id="saleFavoriteTextarea" rows="8" placeholder="Paspas
+Bagaj Havuzu
+LED"></textarea>
+      <div class="row-gap" style="margin-top:12px">
+        <button type="button" class="btn success" onclick="saveSaleFavoritesFromEditor()">Kaydet</button>
+        <button type="button" class="btn secondary" onclick="resetSaleFavorites()">Varsayılana Dön</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="staffEditor" class="modal-backdrop hidden">
+    <div class="modal-card wide">
+      <div class="section-head compact">
+        <h2>Personel Yönetimi</h2>
+        <button type="button" class="btn ghost" onclick="closeStaffEditor()">Kapat</button>
+      </div>
+      <p class="muted">Personel adı, rolü ve şifresini buradan düzenle. Bu alana giriş için Admin şifresi gerekir.</p>
+      <div id="staffEditorBody"></div>
+      <div class="row-gap" style="margin-top:12px">
+        <button type="button" class="btn secondary" onclick="addStaffEditorRow()">+ Personel Ekle</button>
+        <button type="button" class="btn success" onclick="saveStaffEditor()">Kaydet</button>
+        <button type="button" class="btn danger" onclick="resetStaffEditor()">Varsayılana Dön</button>
+      </div>
     </div>
   </div>
 
