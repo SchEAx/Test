@@ -30,6 +30,16 @@
   🔴 <strong id="newRequestAlertText">Yeni depo talebi var</strong>
   <button onclick="clearNewRequestAlert()">Gördüm</button>
 </div>
+
+    <div class="staff-bar">
+      <div class="staff-active">
+        <span>Aktif Personel</span>
+        <strong id="staffRoleBadge">Personel</strong>
+      </div>
+      <select id="currentStaffSelect" aria-label="Aktif personel seç"></select>
+      <button type="button" class="btn secondary staff-manage-btn" onclick="openStaffEditor()">👤 Personel Yönet</button>
+    </div>
+
     <nav class="top-nav">
       <button id="nav-requests" onclick="switchTab('requests')">Depo</button>
       <button id="nav-search" onclick="switchTab('search')">Ara</button>
@@ -221,6 +231,7 @@ LED"></textarea>
           <div class="row-gap sale-actions">
             <button id="completeSaleBtn" class="btn success" type="button">Satışı Tamamla</button>
             <button id="clearSaleBtn" class="btn ghost" type="button">Temizle</button>
+            <button id="printLastSaleBtn" class="btn secondary" type="button" disabled>Son Fişi Yazdır</button>
           </div>
         </div>
       </section>
@@ -232,6 +243,25 @@ LED"></textarea>
   </div>
 
   <div id="toast" class="toast hidden"></div>
+
+  <div id="staffEditor" class="staff-editor hidden">
+    <div class="staff-editor-card">
+      <div class="section-head">
+        <div>
+          <h2>Personel Yönetimi</h2>
+          <p class="muted">Aktif personel satış fişine ve hareket açıklamasına işlenir.</p>
+        </div>
+        <button type="button" class="btn ghost" onclick="closeStaffEditor()">Kapat</button>
+      </div>
+      <div id="staffEditorBody" class="staff-editor-body"></div>
+      <div class="row-gap staff-editor-actions">
+        <button type="button" class="btn secondary" onclick="addStaffEditorRow()">+ Personel Ekle</button>
+        <button type="button" class="btn success" onclick="saveStaffEditor()">Kaydet</button>
+        <button type="button" class="btn ghost" onclick="resetStaffEditor()">Varsayılana Dön</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
