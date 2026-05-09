@@ -9,6 +9,7 @@ const state = {
 highlightRequestIds: new Set(),
 originalTitle: document.title,
   saleCart: [],
+  lastQuickSale: null,
 };
 
 const el = {
@@ -17,7 +18,7 @@ const el = {
   productBrand: document.getElementById("productBrand"), category: document.getElementById("category"), carBrand: document.getElementById("carBrand"), carModel: document.getElementById("carModel"), carType: document.getElementById("carType"), vehicleYear: document.getElementById("vehicleYear"), stock: document.getElementById("stock"), minStock: document.getElementById("minStock"), location: document.getElementById("location"), note: document.getElementById("note"),
   saveProductBtn: document.getElementById("saveProductBtn"), clearProductBtn: document.getElementById("clearProductBtn"), movementSearchInput: document.getElementById("movementSearchInput"), movementSearchList: document.getElementById("movementSearchList"), searchInput: document.getElementById("searchInput"), productTableBody: document.getElementById("productTableBody"), movementList: document.getElementById("movementList"),
   stockRequestsBox: document.getElementById("stockRequestsBox"), reservationPanel: document.getElementById("reservationPanel"), requestedTextBox: document.getElementById("requestedTextBox"), productSearchInput: document.getElementById("productSearchInput"), productMatchBox: document.getElementById("productMatchBox"), toast: document.getElementById("toast"),
-  saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn"), todaySaleTotal: document.getElementById("todaySaleTotal"), todaySaleQty: document.getElementById("todaySaleQty"), todayCashTotal: document.getElementById("todayCashTotal"), todayCardTotal: document.getElementById("todayCardTotal"), topSaleProducts: document.getElementById("topSaleProducts")
+  saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn"), todaySaleTotal: document.getElementById("todaySaleTotal"), todaySaleQty: document.getElementById("todaySaleQty"), todayCashTotal: document.getElementById("todayCashTotal"), todayCardTotal: document.getElementById("todayCardTotal"), topSaleProducts: document.getElementById("topSaleProducts"), currentStaffSelect: document.getElementById("currentStaffSelect"), staffRoleBadge: document.getElementById("staffRoleBadge"), staffEditor: document.getElementById("staffEditor"), staffEditorBody: document.getElementById("staffEditorBody"), printLastSaleBtn: document.getElementById("printLastSaleBtn")
 };
 
 function showToast(message, isError = false) {
@@ -329,6 +330,130 @@ function renderSaleDashboard() {
 }
 
 
+
+const STAFF_STORE_KEY = "garage_staff_list_v1";
+const CURRENT_STAFF_STORE_KEY = "garage_current_staff_v1";
+const DEFAULT_STAFF_LIST = [
+  { name: "Admin", role: "admin" },
+  { name: "Kasa", role: "kasa" },
+  { name: "Depo", role: "depo" },
+  { name: "Usta", role: "usta" }
+];
+
+function normalizeStaffName(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function roleLabel(role) {
+  return ({ admin: "Admin", kasa: "Kasa", depo: "Depo", usta: "Usta" })[role] || "Personel";
+}
+
+function readStaffList() {
+  try {
+    const raw = localStorage.getItem(STAFF_STORE_KEY);
+    if (!raw) return [...DEFAULT_STAFF_LIST];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DEFAULT_STAFF_LIST];
+    const cleaned = parsed
+      .map(item => ({ name: normalizeStaffName(item?.name), role: String(item?.role || "kasa") }))
+      .filter(item => item.name)
+      .slice(0, 30);
+    return cleaned.length ? cleaned : [...DEFAULT_STAFF_LIST];
+  } catch {
+    return [...DEFAULT_STAFF_LIST];
+  }
+}
+
+function writeStaffList(list) {
+  const cleaned = (list || [])
+    .map(item => ({ name: normalizeStaffName(item?.name), role: String(item?.role || "kasa") }))
+    .filter(item => item.name)
+    .filter((item, index, arr) => arr.findIndex(x => x.name.toLocaleLowerCase("tr-TR") === item.name.toLocaleLowerCase("tr-TR")) === index)
+    .slice(0, 30);
+  localStorage.setItem(STAFF_STORE_KEY, JSON.stringify(cleaned.length ? cleaned : DEFAULT_STAFF_LIST));
+  return cleaned.length ? cleaned : [...DEFAULT_STAFF_LIST];
+}
+
+function currentStaffName() {
+  const saved = localStorage.getItem(CURRENT_STAFF_STORE_KEY);
+  const staff = readStaffList();
+  if (saved && staff.some(s => s.name === saved)) return saved;
+  return staff[0]?.name || "Kasa";
+}
+
+function currentStaff() {
+  const name = currentStaffName();
+  return readStaffList().find(s => s.name === name) || { name, role: "kasa" };
+}
+
+function renderStaffSelector() {
+  if (!el.currentStaffSelect) return;
+  const staff = readStaffList();
+  const current = currentStaffName();
+  el.currentStaffSelect.innerHTML = staff.map(s => `<option value="${escapeHtml(s.name)}" ${s.name === current ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("");
+  const active = currentStaff();
+  if (el.staffRoleBadge) el.staffRoleBadge.textContent = roleLabel(active.role);
+}
+
+window.setCurrentStaff = function(name) {
+  if (!name) return;
+  localStorage.setItem(CURRENT_STAFF_STORE_KEY, name);
+  renderStaffSelector();
+  showToast(`Aktif personel: ${name} ✅`);
+};
+
+function staffEditorRow(item = { name: "", role: "kasa" }) {
+  const id = Math.random().toString(36).slice(2);
+  return `
+    <div class="staff-editor-row" data-staff-row>
+      <input data-staff-name value="${escapeHtml(item.name || "")}" placeholder="Personel adı" />
+      <select data-staff-role>
+        <option value="admin" ${item.role === "admin" ? "selected" : ""}>Admin</option>
+        <option value="kasa" ${item.role === "kasa" ? "selected" : ""}>Kasa</option>
+        <option value="depo" ${item.role === "depo" ? "selected" : ""}>Depo</option>
+        <option value="usta" ${item.role === "usta" ? "selected" : ""}>Usta</option>
+      </select>
+      <button type="button" class="btn danger" onclick="this.closest('[data-staff-row]').remove()">Sil</button>
+    </div>`;
+}
+
+window.openStaffEditor = function() {
+  if (!el.staffEditor || !el.staffEditorBody) return;
+  el.staffEditorBody.innerHTML = readStaffList().map(staffEditorRow).join("");
+  el.staffEditor.classList.remove("hidden");
+};
+
+window.closeStaffEditor = function() {
+  if (el.staffEditor) el.staffEditor.classList.add("hidden");
+};
+
+window.addStaffEditorRow = function() {
+  if (!el.staffEditorBody) return;
+  el.staffEditorBody.insertAdjacentHTML("beforeend", staffEditorRow({ name: "", role: "kasa" }));
+};
+
+window.saveStaffEditor = function() {
+  if (!el.staffEditorBody) return;
+  const rows = [...el.staffEditorBody.querySelectorAll("[data-staff-row]")];
+  const staff = rows.map(row => ({
+    name: normalizeStaffName(row.querySelector("[data-staff-name]")?.value),
+    role: row.querySelector("[data-staff-role]")?.value || "kasa"
+  })).filter(x => x.name);
+  const saved = writeStaffList(staff);
+  if (!saved.some(s => s.name === currentStaffName())) localStorage.setItem(CURRENT_STAFF_STORE_KEY, saved[0]?.name || "Kasa");
+  renderStaffSelector();
+  closeStaffEditor();
+  showToast("Personel listesi kaydedildi ✅");
+};
+
+window.resetStaffEditor = function() {
+  localStorage.removeItem(STAFF_STORE_KEY);
+  localStorage.removeItem(CURRENT_STAFF_STORE_KEY);
+  if (el.staffEditorBody) el.staffEditorBody.innerHTML = readStaffList().map(staffEditorRow).join("");
+  renderStaffSelector();
+  showToast("Personel listesi varsayılana döndü ✅");
+};
+
 const SALE_FAVORITES_STORE_KEY = "garage_sale_favorites_v1";
 const DEFAULT_SALE_FAVORITES = [
   "Paspas",
@@ -580,6 +705,104 @@ window.clearSaleCart = function() {
   renderSaleCart();
 };
 
+
+function buildQuickSaleSnapshot() {
+  const staff = currentStaff();
+  return {
+    saleNo: "HS-" + Date.now().toString().slice(-8),
+    createdAt: new Date().toISOString(),
+    staffName: staff.name,
+    staffRole: roleLabel(staff.role),
+    paymentType: el.salePaymentType?.value || "Nakit",
+    note: String(el.saleCustomerNote?.value || "").trim(),
+    total: saleCartTotal(),
+    items: state.saleCart.map(item => ({
+      productId: item.productId,
+      name: item.name,
+      detail: item.detail,
+      qty: Number(item.qty || 0),
+      price: Number(item.price || 0),
+      lineTotal: Number(item.qty || 0) * Number(item.price || 0)
+    }))
+  };
+}
+
+function printQuickSaleReceipt(sale = state.lastQuickSale) {
+  if (!sale || !sale.items?.length) return showToast("Yazdırılacak satış fişi yok", true);
+
+  const itemsHtml = sale.items.map(item => `
+    <tr>
+      <td>
+        <strong>${escapeHtml(item.name || "Ürün")}</strong>
+        <small>${escapeHtml(item.detail || "")}</small>
+      </td>
+      <td>${Number(item.qty || 0)}</td>
+      <td>${formatSaleMoney(item.price)}</td>
+      <td>${formatSaleMoney(item.lineTotal)}</td>
+    </tr>
+  `).join("");
+
+  const win = window.open("", "_blank", "width=420,height=720");
+  if (!win) return showToast("Fiş penceresi açılamadı. Popup iznini kontrol et.", true);
+
+  win.document.write(`
+    <html>
+      <head>
+        <title>Hızlı Satış Fişi - ${escapeHtml(sale.saleNo)}</title>
+        <style>
+          @page { size: A5 portrait; margin: 6mm; }
+          body { margin:0; font-family: Arial, sans-serif; color:#111; background:#fff; font-size:11px; }
+          .page { padding:6mm; }
+          .head { text-align:center; border-bottom:1px solid #ddd; padding-bottom:8px; margin-bottom:8px; }
+          .head img { max-width:110px; max-height:64px; object-fit:contain; margin-bottom:4px; }
+          h1 { font-size:16px; margin:3px 0; }
+          .muted { color:#666; font-size:10px; }
+          .info { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin:8px 0; }
+          .box { border:1px solid #ddd; border-radius:8px; padding:6px; }
+          table { width:100%; border-collapse:collapse; margin-top:8px; }
+          th,td { border-bottom:1px dashed #ddd; padding:5px 3px; text-align:left; vertical-align:top; }
+          th:nth-child(2),td:nth-child(2){ text-align:center; width:34px; }
+          th:nth-child(3),th:nth-child(4),td:nth-child(3),td:nth-child(4){ text-align:right; white-space:nowrap; }
+          small { display:block; color:#666; margin-top:2px; }
+          .total { display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding:8px; border-radius:8px; background:#f3f4f6; font-size:14px; font-weight:800; }
+          .foot { margin-top:12px; text-align:center; color:#666; font-size:10px; }
+          .print { margin:8px; padding:10px 14px; border:0; border-radius:10px; background:#111; color:#fff; font-weight:700; cursor:pointer; }
+          @media print { .print { display:none; } }
+        </style>
+      </head>
+      <body>
+        <button class="print" onclick="window.print()">Yazdır</button>
+        <div class="page">
+          <div class="head">
+            <img src="/logo.png" onerror="this.style.display='none'" />
+            <h1>Garage İstanbul</h1>
+            <div class="muted">Hızlı Satış Fişi</div>
+          </div>
+          <div class="info">
+            <div class="box"><b>Fiş No</b><br>${escapeHtml(sale.saleNo)}</div>
+            <div class="box"><b>Tarih</b><br>${formatDate(sale.createdAt)}</div>
+            <div class="box"><b>Personel</b><br>${escapeHtml(sale.staffName || "-")} (${escapeHtml(sale.staffRole || "-")})</div>
+            <div class="box"><b>Ödeme</b><br>${escapeHtml(sale.paymentType || "-")}</div>
+          </div>
+          <table>
+            <thead><tr><th>Ürün</th><th>Ad.</th><th>Birim</th><th>Tutar</th></tr></thead>
+            <tbody>${itemsHtml}</tbody>
+          </table>
+          <div class="total"><span>TOPLAM</span><span>${formatSaleMoney(sale.total)}</span></div>
+          ${sale.note ? `<div class="box" style="margin-top:8px"><b>Not</b><br>${escapeHtml(sale.note)}</div>` : ""}
+          <div class="foot">Teşekkür ederiz · Powered By GPT & SchEAx</div>
+        </div>
+      </body>
+    </html>
+  `);
+  win.document.close();
+  setTimeout(() => { try { win.focus(); } catch {} }, 250);
+}
+
+window.printLastQuickSale = function() {
+  printQuickSaleReceipt(state.lastQuickSale);
+};
+
 async function completeQuickSale() {
   if (!state.saleCart.length) return showToast("Sepet boş", true);
 
@@ -593,9 +816,11 @@ async function completeQuickSale() {
     if (available < Number(item.qty || 0)) return showToast(`${item.name} için stok yetersiz. Kullanılabilir: ${available}`, true);
   }
 
-  const total = saleCartTotal();
-  const paymentType = el.salePaymentType?.value || "Nakit";
-  const note = String(el.saleCustomerNote?.value || "").trim();
+  const saleSnapshot = buildQuickSaleSnapshot();
+  const total = saleSnapshot.total;
+  const paymentType = saleSnapshot.paymentType;
+  const note = saleSnapshot.note;
+  const staff = currentStaff();
 
   if (!confirm(`${state.saleCart.length} kalem satış tamamlanacak. Toplam: ${formatSaleMoney(total)}\nDevam edilsin mi?`)) return;
 
@@ -613,7 +838,7 @@ async function completeQuickSale() {
 
       if (updateError) throw updateError;
 
-      const desc = `Hızlı satış (${paymentType}) - Birim: ${formatSaleMoney(item.price)} - Toplam: ${formatSaleMoney(Number(item.qty || 0) * Number(item.price || 0))}${note ? " - Not: " + note : ""}`;
+      const desc = `Hızlı satış (${paymentType}) - Personel: ${staff.name} (${roleLabel(staff.role)}) - Fiş: ${saleSnapshot.saleNo} - Birim: ${formatSaleMoney(item.price)} - Toplam: ${formatSaleMoney(Number(item.qty || 0) * Number(item.price || 0))}${note ? " - Not: " + note : ""}`;
 
       const { error: movementError } = await supabaseClient
         .from("stock_movements")
@@ -627,11 +852,15 @@ async function completeQuickSale() {
       if (movementError) throw movementError;
     }
 
+    state.lastQuickSale = saleSnapshot;
+    if (el.printLastSaleBtn) el.printLastSaleBtn.disabled = false;
     showToast(`Satış tamamlandı ✅ Toplam: ${formatSaleMoney(total)}`);
+    const shouldPrint = confirm("Satış tamamlandı. Fiş yazdırılsın mı?");
     clearSaleCart();
     await loadAll();
     renderSaleProducts();
     renderSaleDashboard();
+    if (shouldPrint) printQuickSaleReceipt(saleSnapshot);
   } catch (err) {
     console.error("Hızlı satış hatası:", err);
     showToast(err.message || "Satış tamamlanamadı", true);
@@ -940,5 +1169,7 @@ if (el.saleSearchInput) {
 }
 if (el.completeSaleBtn) el.completeSaleBtn.addEventListener("click", completeQuickSale);
 if (el.clearSaleBtn) el.clearSaleBtn.addEventListener("click", clearSaleCart);
+if (el.printLastSaleBtn) el.printLastSaleBtn.addEventListener("click", printLastQuickSale);
+if (el.currentStaffSelect) el.currentStaffSelect.addEventListener("change", (e) => setCurrentStaff(e.target.value));
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
-renderSaleFavorites(); switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
+renderStaffSelector(); renderSaleFavorites(); switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
