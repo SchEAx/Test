@@ -127,15 +127,37 @@
             <button class="btn secondary" onclick="clearSaleCart()">Sepeti Temizle</button>
           </div>
 
+          <div class="sale-dashboard">
+            <div class="sale-stat-card"><span>Bugünkü Ciro</span><strong id="todaySaleTotal">₺0,00</strong></div>
+            <div class="sale-stat-card"><span>Satılan Adet</span><strong id="todaySaleQty">0</strong></div>
+            <div class="sale-stat-card"><span>Nakit</span><strong id="todayCashTotal">₺0,00</strong></div>
+            <div class="sale-stat-card"><span>Kart</span><strong id="todayCardTotal">₺0,00</strong></div>
+          </div>
+
+          <div class="quick-favorites" id="saleFavoriteButtons">
+            <button type="button" onclick="setSaleFavoriteSearch('paspas')">Paspas</button>
+            <button type="button" onclick="setSaleFavoriteSearch('havuz')">Bagaj Havuzu</button>
+            <button type="button" onclick="setSaleFavoriteSearch('cam rüzgarlığı')">Cam Rüzgarlığı</button>
+            <button type="button" onclick="setSaleFavoriteSearch('led')">LED</button>
+            <button type="button" onclick="setSaleFavoriteSearch('xenon')">Xenon</button>
+            <button type="button" onclick="setSaleFavoriteSearch('sensör')">Sensör</button>
+          </div>
+
           <div class="form-grid">
             <div class="full">
               <label>Ürün / Barkod Ara</label>
-              <input id="saleSearchInput" type="text" placeholder="Barkod, paspas, Megane, Rizline..." />
+              <input id="saleSearchInput" type="text" placeholder="Barkod okut veya paspas, Megane, Rizline yaz..." autocomplete="off" />
+              <p class="muted sale-hint">Barkod birebir eşleşirse ürün otomatik sepete eklenir.</p>
             </div>
           </div>
 
           <div id="saleProductList" class="sale-product-list">
             <div class="empty-state">Satışa ürün eklemek için arama yap</div>
+          </div>
+
+          <div class="top-sales-box">
+            <div class="section-head compact"><h2>Bugünün En Çok Satanları</h2></div>
+            <div id="topSaleProducts" class="top-sale-list"><div class="empty-state">Henüz hızlı satış yok</div></div>
           </div>
         </div>
 
