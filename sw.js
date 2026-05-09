@@ -1,4 +1,4 @@
-const CACHE_NAME = "stok-takip-v13-mega-rapor";
+const CACHE_NAME = "stok-takip-v12-mega-nav-fix";
 const ASSETS = [
   "./",
   "./index.html",
