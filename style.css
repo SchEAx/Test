@@ -111,3 +111,14 @@
   .staff-editor-row{grid-template-columns:1fr}
   .staff-editor-row .btn{width:100%}
 }
+
+
+/* === Grup 10 FIX: Personel panel / modal === */
+.favorite-edit-row{margin:-4px 0 14px}
+.staff-panel{display:grid;grid-template-columns:1fr .7fr auto;gap:10px;align-items:end;border:1px solid var(--border);background:rgba(255,255,255,.03);border-radius:16px;padding:12px;margin-bottom:14px}
+.staff-role-badge{width:100%;border:1px solid rgba(37,99,235,.35);background:rgba(37,99,235,.18);color:#dbeafe;border-radius:14px;padding:12px 14px;font-weight:900;text-align:center}
+.modal-backdrop{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(8px)}
+.modal-card{width:min(560px,100%);max-height:90vh;overflow:auto;background:#111827;border:1px solid var(--border);border-radius:22px;padding:18px;box-shadow:0 25px 80px rgba(0,0,0,.55)}
+.modal-card.wide{width:min(860px,100%)}
+.modal-card textarea{width:100%;margin-top:12px}
+@media(max-width:760px){.staff-panel{grid-template-columns:1fr}.staff-panel .btn{width:100%}}
