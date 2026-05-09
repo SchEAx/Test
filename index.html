@@ -134,13 +134,37 @@
             <div class="sale-stat-card"><span>Kart</span><strong id="todayCardTotal">₺0,00</strong></div>
           </div>
 
-          <div class="quick-favorites" id="saleFavoriteButtons">
-            <button type="button" onclick="setSaleFavoriteSearch('paspas')">Paspas</button>
-            <button type="button" onclick="setSaleFavoriteSearch('havuz')">Bagaj Havuzu</button>
-            <button type="button" onclick="setSaleFavoriteSearch('cam rüzgarlığı')">Cam Rüzgarlığı</button>
-            <button type="button" onclick="setSaleFavoriteSearch('led')">LED</button>
-            <button type="button" onclick="setSaleFavoriteSearch('xenon')">Xenon</button>
-            <button type="button" onclick="setSaleFavoriteSearch('sensör')">Sensör</button>
+          <div class="quick-favorites-head">
+            <div>
+              <strong>Hızlı Butonlar</strong>
+              <span class="muted">Kasadaki kullanıcı bu listeyi kendine göre düzenleyebilir.</span>
+            </div>
+            <button type="button" class="btn secondary favorite-edit-btn" onclick="openSaleFavoritesEditor()">⚙️ Favorileri Düzenle</button>
+          </div>
+
+          <div class="quick-favorites" id="saleFavoriteButtons"></div>
+
+          <div id="saleFavoriteEditor" class="favorite-editor hidden">
+            <div class="favorite-editor-card">
+              <div class="section-head">
+                <div>
+                  <h2>Favori Satış Butonları</h2>
+                  <p class="muted">Her satıra bir buton adı yaz. Örn: Paspas, LED, Bagaj Havuzu</p>
+                </div>
+                <button type="button" class="btn ghost" onclick="closeSaleFavoritesEditor()">Kapat</button>
+              </div>
+
+              <label>Favoriler</label>
+              <textarea id="saleFavoriteTextarea" rows="8" placeholder="Paspas
+Bagaj Havuzu
+Cam Rüzgarlığı
+LED"></textarea>
+
+              <div class="row-gap favorite-editor-actions">
+                <button type="button" class="btn success" onclick="saveSaleFavoritesFromEditor()">Kaydet</button>
+                <button type="button" class="btn secondary" onclick="resetSaleFavorites()">Varsayılana Dön</button>
+              </div>
+            </div>
           </div>
 
           <div class="form-grid">
