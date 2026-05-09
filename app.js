@@ -328,6 +328,104 @@ function renderSaleDashboard() {
   }
 }
 
+
+const SALE_FAVORITES_STORE_KEY = "garage_sale_favorites_v1";
+const DEFAULT_SALE_FAVORITES = [
+  "Paspas",
+  "Bagaj Havuzu",
+  "Cam Rüzgarlığı",
+  "LED",
+  "Xenon",
+  "Sensör"
+];
+
+function normalizeFavoriteLine(value) {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function readSaleFavorites() {
+  try {
+    const raw = localStorage.getItem(SALE_FAVORITES_STORE_KEY);
+    if (!raw) return [...DEFAULT_SALE_FAVORITES];
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DEFAULT_SALE_FAVORITES];
+
+    const cleaned = parsed
+      .map(normalizeFavoriteLine)
+      .filter(Boolean)
+      .slice(0, 20);
+
+    return cleaned.length ? cleaned : [...DEFAULT_SALE_FAVORITES];
+  } catch {
+    return [...DEFAULT_SALE_FAVORITES];
+  }
+}
+
+function writeSaleFavorites(list) {
+  const cleaned = (list || [])
+    .map(normalizeFavoriteLine)
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.findIndex(x => x.toLocaleLowerCase("tr-TR") === value.toLocaleLowerCase("tr-TR")) === index)
+    .slice(0, 20);
+
+  localStorage.setItem(SALE_FAVORITES_STORE_KEY, JSON.stringify(cleaned.length ? cleaned : DEFAULT_SALE_FAVORITES));
+  return cleaned.length ? cleaned : [...DEFAULT_SALE_FAVORITES];
+}
+
+function renderSaleFavorites() {
+  const box = document.getElementById("saleFavoriteButtons");
+  if (!box) return;
+
+  const favorites = readSaleFavorites();
+
+  box.innerHTML = favorites.map((name) => `
+    <button type="button" onclick="setSaleFavoriteSearch(decodeURIComponent('${encodeURIComponent(name)}'))">${escapeHtml(name)}</button>
+  `).join("");
+}
+
+window.openSaleFavoritesEditor = function() {
+  const editor = document.getElementById("saleFavoriteEditor");
+  const textarea = document.getElementById("saleFavoriteTextarea");
+  if (!editor || !textarea) return;
+
+  textarea.value = readSaleFavorites().join("\n");
+  editor.classList.remove("hidden");
+  setTimeout(() => textarea.focus(), 50);
+};
+
+window.closeSaleFavoritesEditor = function() {
+  const editor = document.getElementById("saleFavoriteEditor");
+  if (editor) editor.classList.add("hidden");
+};
+
+window.saveSaleFavoritesFromEditor = function() {
+  const textarea = document.getElementById("saleFavoriteTextarea");
+  if (!textarea) return;
+
+  const favorites = textarea.value
+    .split(/\n|,/)
+    .map(normalizeFavoriteLine)
+    .filter(Boolean);
+
+  writeSaleFavorites(favorites);
+  renderSaleFavorites();
+  closeSaleFavoritesEditor();
+  showToast("Favori butonlar kaydedildi ✅");
+};
+
+window.resetSaleFavorites = function() {
+  localStorage.removeItem(SALE_FAVORITES_STORE_KEY);
+  renderSaleFavorites();
+
+  const textarea = document.getElementById("saleFavoriteTextarea");
+  if (textarea) textarea.value = DEFAULT_SALE_FAVORITES.join("\n");
+
+  showToast("Favoriler varsayılana döndü ✅");
+};
+
 window.setSaleFavoriteSearch = function(keyword) {
   if (!el.saleSearchInput) return;
   el.saleSearchInput.value = keyword;
@@ -682,6 +780,7 @@ function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "
   loadStockRequests();
 }
 if (tab === "sale") {
+  renderSaleFavorites();
   renderSaleProducts();
   renderSaleCart();
   renderSaleDashboard();
@@ -842,4 +941,4 @@ if (el.saleSearchInput) {
 if (el.completeSaleBtn) el.completeSaleBtn.addEventListener("click", completeQuickSale);
 if (el.clearSaleBtn) el.clearSaleBtn.addEventListener("click", clearSaleCart);
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
-switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
+renderSaleFavorites(); switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
