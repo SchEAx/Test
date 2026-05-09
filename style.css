@@ -76,3 +76,12 @@
 .sale-summary{margin:16px 0;padding:16px;border-radius:16px;border:1px solid rgba(22,163,74,.25);background:rgba(22,163,74,.10);display:flex;align-items:center;justify-content:space-between;font-size:18px}
 .sale-summary strong{font-size:26px;color:#86efac}.sale-actions{margin-top:14px}.stock-warning{color:#fca5a5;font-weight:800}.sale-cart-card{position:sticky;top:78px;align-self:start}
 @media(max-width:900px){.sale-grid{grid-template-columns:1fr}.sale-cart-card{position:static}.top-nav{grid-template-columns:repeat(2,1fr)}.powered-badge{font-size:10px;padding:7px 10px}}
+
+
+/* === Grup 5: Satış Dashboard / Favoriler / Barkod === */
+.sale-dashboard{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:10px 0 14px}
+.sale-stat-card{border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(37,99,235,.12),rgba(255,255,255,.03));border-radius:16px;padding:13px 14px;min-height:82px}
+.sale-stat-card span{display:block;color:var(--muted);font-size:12px;margin-bottom:8px}.sale-stat-card strong{font-size:22px;color:#fff}
+.quick-favorites{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}.quick-favorites button{border:1px solid rgba(37,99,235,.35);background:rgba(37,99,235,.18);color:#dbeafe;border-radius:999px;padding:9px 12px;font-weight:800;cursor:pointer}.quick-favorites button:hover{background:rgba(37,99,235,.32)}
+.sale-hint{font-size:12px;margin:6px 0 0}.top-sales-box{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}.section-head.compact{margin-bottom:8px}.section-head.compact h2{font-size:16px;margin:0}.top-sale-list{display:grid;gap:8px}.top-sale-item{display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);border-radius:14px;padding:10px}.top-sale-item>span{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:10px;background:rgba(37,99,235,.22);color:#bfdbfe;font-weight:900}.top-sale-item strong{display:block;font-size:13px}.top-sale-item small{display:block;color:var(--muted);margin-top:2px}
+@media(max-width:900px){.sale-dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-favorites button{flex:1}}
