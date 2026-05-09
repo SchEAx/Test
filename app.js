@@ -18,7 +18,7 @@ const el = {
   productBrand: document.getElementById("productBrand"), category: document.getElementById("category"), carBrand: document.getElementById("carBrand"), carModel: document.getElementById("carModel"), carType: document.getElementById("carType"), vehicleYear: document.getElementById("vehicleYear"), stock: document.getElementById("stock"), minStock: document.getElementById("minStock"), location: document.getElementById("location"), note: document.getElementById("note"),
   saveProductBtn: document.getElementById("saveProductBtn"), clearProductBtn: document.getElementById("clearProductBtn"), movementSearchInput: document.getElementById("movementSearchInput"), movementSearchList: document.getElementById("movementSearchList"), searchInput: document.getElementById("searchInput"), productTableBody: document.getElementById("productTableBody"), movementList: document.getElementById("movementList"),
   stockRequestsBox: document.getElementById("stockRequestsBox"), reservationPanel: document.getElementById("reservationPanel"), requestedTextBox: document.getElementById("requestedTextBox"), productSearchInput: document.getElementById("productSearchInput"), productMatchBox: document.getElementById("productMatchBox"), toast: document.getElementById("toast"),
-  saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn"), todaySaleTotal: document.getElementById("todaySaleTotal"), todaySaleQty: document.getElementById("todaySaleQty"), todayCashTotal: document.getElementById("todayCashTotal"), todayCardTotal: document.getElementById("todayCardTotal"), topSaleProducts: document.getElementById("topSaleProducts"), currentStaffSelect: document.getElementById("currentStaffSelect"), staffRoleBadge: document.getElementById("staffRoleBadge"), staffEditor: document.getElementById("staffEditor"), staffEditorBody: document.getElementById("staffEditorBody"), printLastSaleBtn: document.getElementById("printLastSaleBtn")
+  saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn"), todaySaleTotal: document.getElementById("todaySaleTotal"), todaySaleQty: document.getElementById("todaySaleQty"), todayCashTotal: document.getElementById("todayCashTotal"), todayCardTotal: document.getElementById("todayCardTotal"), topSaleProducts: document.getElementById("topSaleProducts"), currentStaffSelect: document.getElementById("currentStaffSelect"), staffRoleBadge: document.getElementById("staffRoleBadge"), staffEditor: document.getElementById("staffEditor"), staffEditorBody: document.getElementById("staffEditorBody"), printLastSaleBtn: document.getElementById("printLastSaleBtn"), cancelLastSaleBtn: document.getElementById("cancelLastSaleBtn")
 };
 
 function showToast(message, isError = false) {
@@ -199,7 +199,7 @@ function renderProducts() {
 }
 function renderMovements() {
   if (!state.movements.length) { el.movementList.innerHTML = `<div class="empty-state">Henüz hareket yok</div>`; return; }
-  el.movementList.innerHTML = state.movements.map((m) => { const productName = m.stock_products?.product_name || m.description || "-"; const type = String(m.movement_type || "").toLowerCase(); const typeClass = type.includes("giris") || (type.includes("rezerv") && !type.includes("iptal")) ? "giris" : "cikis"; return `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(productName)}</strong><div class="muted">${escapeHtml(m.description || "-")}</div></div><span class="badge ${typeClass}">${escapeHtml(m.movement_type || "-")}</span></div><div>Miktar: <strong>${Number(m.quantity || 0)}</strong></div><div>Plaka: <strong>${escapeHtml(m.plate || "-")}</strong></div><div>Kayıt No: <strong>${escapeHtml(m.record_no || "-")}</strong></div><div>Tarih: <strong>${formatDate(m.created_at)}</strong></div></div>`; }).join("");
+  el.movementList.innerHTML = state.movements.map((m) => { const productName = m.stock_products?.product_name || m.description || "-"; const type = String(m.movement_type || "").toLowerCase(); const typeClass = type.includes("giris") || type.includes("iade") || (type.includes("rezerv") && !type.includes("iptal")) ? "giris" : "cikis"; return `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(productName)}</strong><div class="muted">${escapeHtml(m.description || "-")}</div></div><span class="badge ${typeClass}">${escapeHtml(m.movement_type || "-")}</span></div><div>Miktar: <strong>${Number(m.quantity || 0)}</strong></div><div>Plaka: <strong>${escapeHtml(m.plate || "-")}</strong></div><div>Kayıt No: <strong>${escapeHtml(m.record_no || "-")}</strong></div><div>Tarih: <strong>${formatDate(m.created_at)}</strong></div></div>`; }).join("");
 }
 function renderMovementSearchResults() {
   const q = normalizeText(el.movementSearchInput.value); if (!q) { el.movementSearchList.innerHTML = `<div class="empty-state">Arama yaparak ürün seç</div>`; return; }
@@ -250,7 +250,9 @@ function isSameTurkeyDate(value, date = new Date()) {
 
 function parseSaleMovement(m) {
   const desc = String(m.description || "");
-  const isSale = String(m.movement_type || "").toLowerCase() === "hizli_satis" || desc.toLocaleLowerCase("tr-TR").includes("hızlı satış");
+  const movementType = String(m.movement_type || "").toLowerCase();
+  const isRefund = movementType === "hizli_satis_iade" || desc.toLocaleLowerCase("tr-TR").includes("hızlı satış iade");
+  const isSale = movementType === "hizli_satis" || isRefund || desc.toLocaleLowerCase("tr-TR").includes("hızlı satış");
   if (!isSale) return null;
 
   const paymentMatch = desc.match(/Hızlı satış \((.*?)\)/i);
@@ -270,9 +272,10 @@ function parseSaleMovement(m) {
 
   return {
     paymentType: paymentMatch ? paymentMatch[1].trim() : "Bilinmiyor",
-    total,
-    qty,
-    productName: m.stock_products?.product_name || m.description || "Ürün"
+    total: isRefund ? -Math.abs(total) : total,
+    qty: isRefund ? -Math.abs(qty) : qty,
+    productName: m.stock_products?.product_name || m.description || "Ürün",
+    isRefund
   };
 }
 
@@ -705,6 +708,42 @@ window.clearSaleCart = function() {
   renderSaleCart();
 };
 
+const LAST_QUICK_SALE_STORE_KEY = "garage_last_quick_sale_v1";
+
+function saveLastQuickSale(sale) {
+  state.lastQuickSale = sale || null;
+
+  try {
+    if (sale) localStorage.setItem(LAST_QUICK_SALE_STORE_KEY, JSON.stringify(sale));
+    else localStorage.removeItem(LAST_QUICK_SALE_STORE_KEY);
+  } catch (e) {
+    console.warn("Son satış hafızaya alınamadı:", e);
+  }
+
+  updateLastSaleButtons();
+}
+
+function loadLastQuickSale() {
+  try {
+    const raw = localStorage.getItem(LAST_QUICK_SALE_STORE_KEY);
+    state.lastQuickSale = raw ? JSON.parse(raw) : null;
+  } catch {
+    state.lastQuickSale = null;
+  }
+  updateLastSaleButtons();
+}
+
+function updateLastSaleButtons() {
+  const hasSale = !!(state.lastQuickSale && state.lastQuickSale.items && state.lastQuickSale.items.length);
+  const isCancelled = !!state.lastQuickSale?.cancelledAt;
+
+  if (el.printLastSaleBtn) el.printLastSaleBtn.disabled = !hasSale;
+  if (el.cancelLastSaleBtn) {
+    el.cancelLastSaleBtn.disabled = !hasSale || isCancelled;
+    el.cancelLastSaleBtn.textContent = isCancelled ? "Son Satış İptal Edildi" : "Son Satışı İptal Et";
+  }
+}
+
 
 function buildQuickSaleSnapshot() {
   const staff = currentStaff();
@@ -803,6 +842,70 @@ window.printLastQuickSale = function() {
   printQuickSaleReceipt(state.lastQuickSale);
 };
 
+window.cancelLastQuickSale = async function() {
+  const sale = state.lastQuickSale;
+  if (!sale || !sale.items?.length) return showToast("İptal edilecek son satış yok", true);
+  if (sale.cancelledAt) return showToast("Bu satış zaten iptal edilmiş", true);
+
+  const reason = prompt(`Son satış iptal edilecek.
+Fiş: ${sale.saleNo}
+Toplam: ${formatSaleMoney(sale.total)}
+
+İade/iptal nedeni:`, "Müşteri iadesi");
+  if (reason === null) return;
+
+  if (!confirm(`${sale.saleNo} numaralı satış iptal edilsin mi?
+Stoklar geri eklenecek ve cirodan düşülecek.`)) return;
+
+  try {
+    setLoading(true);
+    const staff = currentStaff();
+
+    for (const item of sale.items) {
+      const product = state.products.find((p) => String(p.id) === String(item.productId));
+      const currentQty = Number(product?.stock || 0);
+      const newQty = currentQty + Number(item.qty || 0);
+
+      const { error: updateError } = await supabaseClient
+        .from("stock_products")
+        .update({ quantity: newQty })
+        .eq("id", item.productId);
+
+      if (updateError) throw updateError;
+
+      const desc = `Hızlı satış iade (${sale.paymentType || "-"}) - Personel: ${staff.name} (${roleLabel(staff.role)}) - İptal Fiş: ${sale.saleNo} - Birim: ${formatSaleMoney(item.price)} - Toplam: ${formatSaleMoney(item.lineTotal)} - Neden: ${reason || "-"}`;
+
+      const { error: movementError } = await supabaseClient
+        .from("stock_movements")
+        .insert({
+          product_id: item.productId,
+          movement_type: "hizli_satis_iade",
+          quantity: Number(item.qty || 0),
+          description: desc
+        });
+
+      if (movementError) throw movementError;
+    }
+
+    saveLastQuickSale({
+      ...sale,
+      cancelledAt: new Date().toISOString(),
+      cancelReason: reason || "-",
+      cancelledBy: staff.name
+    });
+
+    showToast("Satış iptal edildi, stoklar geri eklendi ✅");
+    await loadAll();
+    renderSaleProducts();
+    renderSaleDashboard();
+  } catch (err) {
+    console.error("Satış iptal hatası:", err);
+    showToast(err.message || "Satış iptal edilemedi", true);
+  } finally {
+    setLoading(false);
+  }
+};
+
 async function completeQuickSale() {
   if (!state.saleCart.length) return showToast("Sepet boş", true);
 
@@ -852,8 +955,7 @@ async function completeQuickSale() {
       if (movementError) throw movementError;
     }
 
-    state.lastQuickSale = saleSnapshot;
-    if (el.printLastSaleBtn) el.printLastSaleBtn.disabled = false;
+    saveLastQuickSale(saleSnapshot);
     showToast(`Satış tamamlandı ✅ Toplam: ${formatSaleMoney(total)}`);
     const shouldPrint = confirm("Satış tamamlandı. Fiş yazdırılsın mı?");
     clearSaleCart();
@@ -1170,6 +1272,7 @@ if (el.saleSearchInput) {
 if (el.completeSaleBtn) el.completeSaleBtn.addEventListener("click", completeQuickSale);
 if (el.clearSaleBtn) el.clearSaleBtn.addEventListener("click", clearSaleCart);
 if (el.printLastSaleBtn) el.printLastSaleBtn.addEventListener("click", printLastQuickSale);
+if (el.cancelLastSaleBtn) el.cancelLastSaleBtn.addEventListener("click", cancelLastQuickSale);
 if (el.currentStaffSelect) el.currentStaffSelect.addEventListener("change", (e) => setCurrentStaff(e.target.value));
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
-renderStaffSelector(); renderSaleFavorites(); switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
+renderStaffSelector(); renderSaleFavorites(); loadLastQuickSale(); switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
