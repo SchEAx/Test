@@ -85,3 +85,46 @@
 .quick-favorites{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}.quick-favorites button{border:1px solid rgba(37,99,235,.35);background:rgba(37,99,235,.18);color:#dbeafe;border-radius:999px;padding:9px 12px;font-weight:800;cursor:pointer}.quick-favorites button:hover{background:rgba(37,99,235,.32)}
 .sale-hint{font-size:12px;margin:6px 0 0}.top-sales-box{margin-top:16px;border-top:1px solid var(--border);padding-top:14px}.section-head.compact{margin-bottom:8px}.section-head.compact h2{font-size:16px;margin:0}.top-sale-list{display:grid;gap:8px}.top-sale-item{display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);border-radius:14px;padding:10px}.top-sale-item>span{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:10px;background:rgba(37,99,235,.22);color:#bfdbfe;font-weight:900}.top-sale-item strong{display:block;font-size:13px}.top-sale-item small{display:block;color:var(--muted);margin-top:2px}
 @media(max-width:900px){.sale-dashboard{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-favorites button{flex:1}}
+
+
+/* === Grup 6: Düzenlenebilir Favori Satış Butonları === */
+.quick-favorites-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:8px 0 10px;
+  padding:10px 12px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.03);
+  border-radius:16px;
+}
+.quick-favorites-head strong{display:block;color:#fff;font-size:14px;margin-bottom:2px}
+.favorite-edit-btn{width:auto!important;padding:9px 12px!important;border-radius:12px!important;white-space:nowrap}
+.favorite-editor{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  background:rgba(0,0,0,.65);
+  backdrop-filter:blur(8px);
+}
+.favorite-editor-card{
+  width:min(620px,100%);
+  border:1px solid rgba(255,255,255,.12);
+  background:linear-gradient(180deg,#111827,#0b1324);
+  border-radius:22px;
+  padding:18px;
+  box-shadow:0 24px 80px rgba(0,0,0,.55);
+}
+.favorite-editor-card textarea{min-height:210px;line-height:1.45;font-weight:700}
+.favorite-editor-actions{margin-top:14px}
+@media(max-width:640px){
+  .quick-favorites-head{align-items:stretch;flex-direction:column}
+  .favorite-edit-btn{width:100%!important}
+  .favorite-editor{align-items:flex-end;padding:10px}
+  .favorite-editor-card{border-radius:20px 20px 0 0}
+}
