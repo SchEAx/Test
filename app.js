@@ -337,56 +337,115 @@ function renderSaleDashboard() {
 const STAFF_STORE_KEY = "garage_staff_list_v1";
 const CURRENT_STAFF_STORE_KEY = "garage_current_staff_v1";
 const DEFAULT_STAFF_LIST = [
-  { name: "Admin", role: "admin" },
-  { name: "Kasa", role: "kasa" },
-  { name: "Depo", role: "depo" },
-  { name: "Usta", role: "usta" }
+  { name: "Admin", role: "admin", password: "0000" },
+  { name: "Kasa", role: "kasa", password: "1111" },
+  { name: "Depo", role: "depo", password: "2222" },
+  { name: "Usta", role: "usta", password: "3333" }
 ];
 
 function normalizeStaffName(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function normalizeStaffPassword(value, fallback = "1234") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
 function roleLabel(role) {
   return ({ admin: "Admin", kasa: "Kasa", depo: "Depo", usta: "Usta" })[role] || "Personel";
+}
+
+function defaultPasswordForRole(role) {
+  const found = DEFAULT_STAFF_LIST.find(s => s.role === role);
+  return found?.password || "1234";
+}
+
+function normalizeStaffItem(item) {
+  const role = String(item?.role || "kasa");
+  return {
+    name: normalizeStaffName(item?.name),
+    role,
+    password: normalizeStaffPassword(item?.password, defaultPasswordForRole(role))
+  };
 }
 
 function readStaffList() {
   try {
     const raw = localStorage.getItem(STAFF_STORE_KEY);
-    if (!raw) return [...DEFAULT_STAFF_LIST];
+    if (!raw) return DEFAULT_STAFF_LIST.map(normalizeStaffItem);
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [...DEFAULT_STAFF_LIST];
+    if (!Array.isArray(parsed)) return DEFAULT_STAFF_LIST.map(normalizeStaffItem);
     const cleaned = parsed
-      .map(item => ({ name: normalizeStaffName(item?.name), role: String(item?.role || "kasa") }))
+      .map(normalizeStaffItem)
       .filter(item => item.name)
       .slice(0, 30);
-    return cleaned.length ? cleaned : [...DEFAULT_STAFF_LIST];
+    return cleaned.length ? cleaned : DEFAULT_STAFF_LIST.map(normalizeStaffItem);
   } catch {
-    return [...DEFAULT_STAFF_LIST];
+    return DEFAULT_STAFF_LIST.map(normalizeStaffItem);
   }
 }
 
 function writeStaffList(list) {
   const cleaned = (list || [])
-    .map(item => ({ name: normalizeStaffName(item?.name), role: String(item?.role || "kasa") }))
+    .map(normalizeStaffItem)
     .filter(item => item.name)
     .filter((item, index, arr) => arr.findIndex(x => x.name.toLocaleLowerCase("tr-TR") === item.name.toLocaleLowerCase("tr-TR")) === index)
     .slice(0, 30);
-  localStorage.setItem(STAFF_STORE_KEY, JSON.stringify(cleaned.length ? cleaned : DEFAULT_STAFF_LIST));
-  return cleaned.length ? cleaned : [...DEFAULT_STAFF_LIST];
+  localStorage.setItem(STAFF_STORE_KEY, JSON.stringify(cleaned.length ? cleaned : DEFAULT_STAFF_LIST.map(normalizeStaffItem)));
+  return cleaned.length ? cleaned : DEFAULT_STAFF_LIST.map(normalizeStaffItem);
 }
 
 function currentStaffName() {
   const saved = localStorage.getItem(CURRENT_STAFF_STORE_KEY);
   const staff = readStaffList();
   if (saved && staff.some(s => s.name === saved)) return saved;
-  return staff[0]?.name || "Kasa";
+
+  const cashier = staff.find(s => s.role === "kasa");
+  return cashier?.name || staff[0]?.name || "Kasa";
 }
 
 function currentStaff() {
   const name = currentStaffName();
-  return readStaffList().find(s => s.name === name) || { name, role: "kasa" };
+  return readStaffList().find(s => s.name === name) || { name, role: "kasa", password: "1111" };
+}
+
+function adminStaff() {
+  return readStaffList().find(s => s.role === "admin") || DEFAULT_STAFF_LIST[0];
+}
+
+function verifyStaffPassword(targetName) {
+  const staff = readStaffList();
+  const target = staff.find(s => s.name === targetName);
+  if (!target) {
+    showToast("Personel bulunamadı", true);
+    return false;
+  }
+
+  const admin = adminStaff();
+  const entered = prompt(`${target.name} hesabına geçmek için şifre gir:\n(Admin şifresi de geçerlidir.)`);
+
+  if (entered === null) return false;
+
+  const pass = String(entered || "").trim();
+  const targetPass = normalizeStaffPassword(target.password, defaultPasswordForRole(target.role));
+  const adminPass = normalizeStaffPassword(admin.password, "0000");
+
+  if (pass === targetPass || pass === adminPass) return true;
+
+  showToast("Personel şifresi hatalı", true);
+  return false;
+}
+
+function verifyAdminPassword() {
+  const admin = adminStaff();
+  const entered = prompt("Bu işlem için Admin şifresi gerekli:");
+  if (entered === null) return false;
+
+  if (String(entered || "").trim() === normalizeStaffPassword(admin.password, "0000")) return true;
+
+  showToast("Admin şifresi hatalı", true);
+  return false;
 }
 
 function renderStaffSelector() {
@@ -400,13 +459,24 @@ function renderStaffSelector() {
 
 window.setCurrentStaff = function(name) {
   if (!name) return;
+
+  const current = currentStaffName();
+  if (name === current) {
+    renderStaffSelector();
+    return;
+  }
+
+  if (!verifyStaffPassword(name)) {
+    renderStaffSelector();
+    return;
+  }
+
   localStorage.setItem(CURRENT_STAFF_STORE_KEY, name);
   renderStaffSelector();
   showToast(`Aktif personel: ${name} ✅`);
 };
 
-function staffEditorRow(item = { name: "", role: "kasa" }) {
-  const id = Math.random().toString(36).slice(2);
+function staffEditorRow(item = { name: "", role: "kasa", password: "" }) {
   return `
     <div class="staff-editor-row" data-staff-row>
       <input data-staff-name value="${escapeHtml(item.name || "")}" placeholder="Personel adı" />
@@ -416,12 +486,15 @@ function staffEditorRow(item = { name: "", role: "kasa" }) {
         <option value="depo" ${item.role === "depo" ? "selected" : ""}>Depo</option>
         <option value="usta" ${item.role === "usta" ? "selected" : ""}>Usta</option>
       </select>
+      <input data-staff-password type="password" value="${escapeHtml(item.password || "")}" placeholder="Şifre" />
       <button type="button" class="btn danger" onclick="this.closest('[data-staff-row]').remove()">Sil</button>
     </div>`;
 }
 
 window.openStaffEditor = function() {
   if (!el.staffEditor || !el.staffEditorBody) return;
+  if (!verifyAdminPassword()) return;
+
   el.staffEditorBody.innerHTML = readStaffList().map(staffEditorRow).join("");
   el.staffEditor.classList.remove("hidden");
 };
@@ -432,29 +505,34 @@ window.closeStaffEditor = function() {
 
 window.addStaffEditorRow = function() {
   if (!el.staffEditorBody) return;
-  el.staffEditorBody.insertAdjacentHTML("beforeend", staffEditorRow({ name: "", role: "kasa" }));
+  el.staffEditorBody.insertAdjacentHTML("beforeend", staffEditorRow({ name: "", role: "kasa", password: "" }));
 };
 
 window.saveStaffEditor = function() {
   if (!el.staffEditorBody) return;
   const rows = [...el.staffEditorBody.querySelectorAll("[data-staff-row]")];
-  const staff = rows.map(row => ({
-    name: normalizeStaffName(row.querySelector("[data-staff-name]")?.value),
-    role: row.querySelector("[data-staff-role]")?.value || "kasa"
-  })).filter(x => x.name);
+  const staff = rows.map(row => {
+    const role = row.querySelector("[data-staff-role]")?.value || "kasa";
+    return {
+      name: normalizeStaffName(row.querySelector("[data-staff-name]")?.value),
+      role,
+      password: normalizeStaffPassword(row.querySelector("[data-staff-password]")?.value, defaultPasswordForRole(role))
+    };
+  }).filter(x => x.name);
   const saved = writeStaffList(staff);
-  if (!saved.some(s => s.name === currentStaffName())) localStorage.setItem(CURRENT_STAFF_STORE_KEY, saved[0]?.name || "Kasa");
+  if (!saved.some(s => s.name === currentStaffName())) localStorage.setItem(CURRENT_STAFF_STORE_KEY, saved.find(s => s.role === "kasa")?.name || saved[0]?.name || "Kasa");
   renderStaffSelector();
   closeStaffEditor();
-  showToast("Personel listesi kaydedildi ✅");
+  showToast("Personel listesi ve şifreler kaydedildi ✅");
 };
 
 window.resetStaffEditor = function() {
+  if (!confirm("Personel listesi ve şifreler varsayılana dönsün mü?")) return;
   localStorage.removeItem(STAFF_STORE_KEY);
   localStorage.removeItem(CURRENT_STAFF_STORE_KEY);
   if (el.staffEditorBody) el.staffEditorBody.innerHTML = readStaffList().map(staffEditorRow).join("");
   renderStaffSelector();
-  showToast("Personel listesi varsayılana döndü ✅");
+  showToast("Personel listesi ve şifreler varsayılana döndü ✅");
 };
 
 const SALE_FAVORITES_STORE_KEY = "garage_sale_favorites_v1";
