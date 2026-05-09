@@ -1,4 +1,4 @@
-const CACHE_NAME = "stok-takip-v11-favori-duzenleme";
+const CACHE_NAME = "stok-takip-v11-fis-personel";
 const ASSETS = [
   "./",
   "./index.html",
