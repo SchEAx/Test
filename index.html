@@ -421,6 +421,22 @@ LED"></textarea>
           <div id="activityLogList" class="movement-list"><div class="empty-state">Kayıt bekleniyor...</div></div>
         </div>
       </section>
+
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Menü Yetkileri</h2>
+            <p class="muted">Hangi rolün hangi sekmeleri göreceğini buradan ayarla. Admin her zaman tüm sekmeleri görür.</p>
+          </div>
+          <div class="row-gap">
+            <button type="button" class="btn success" onclick="saveRolePermissions()">Yetkileri Kaydet</button>
+            <button type="button" class="btn secondary" onclick="resetRolePermissions()">Varsayılana Dön</button>
+          </div>
+        </div>
+        <div id="rolePermissionEditor" class="permission-editor">
+          <div class="empty-state">Menü yetkileri yükleniyor...</div>
+        </div>
+      </section>
     </div>
 
   <div id="staffEditor" class="modal-backdrop hidden">
