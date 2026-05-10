@@ -1,3 +1,7 @@
+const APP_VERSION = '1.0.0';
+let isOffline = !navigator.onLine;
+let globalLoading = false;
+
 const SUPABASE_URL = "https://dmsovrbkoeivkvmlzals.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRtc292cmJrb2Vpdmt2bWx6YWxzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczNTg3NTMsImV4cCI6MjA5MjkzNDc1M30.Tf_8-AEkON4hvKsWiljiDV5z_LJW7KUebIkU-0R8x_A";
 const VAPID_PUBLIC_KEY = "BAi5RqXIHt50gvHTCOLT0XJxzW6f8OB_pYt_JN4nOKIIP8Cj9KkUu44hsLRZKLxxOKrZVdPFX_c5qc141bJt4Hc";
@@ -2092,3 +2096,39 @@ if (el.criticalSearchInput) el.criticalSearchInput.addEventListener("input", ren
 if (el.historySearchInput) el.historySearchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") renderPlateHistory(); });
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
 initAuthGate(); renderStaffSelector(); renderSaleFavorites(); loadLastQuickSale(); switchTab(canAccessTab("requests") ? "requests" : (ROLE_DEFAULT_TAB[currentStaff().role] || "requests")); updateNotifyButtonUI(); loadNotifications(); loadActivityLogs(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
+
+
+async function checkVersion() {
+  try {
+    const localVersion = localStorage.getItem('app_version');
+    if (localVersion !== APP_VERSION) {
+      localStorage.setItem('app_version', APP_VERSION);
+      if ('caches' in window) {
+        const names = await caches.keys();
+        for (const name of names) {
+          await caches.delete(name);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+window.addEventListener('offline', () => {
+  isOffline = true;
+});
+
+window.addEventListener('online', () => {
+  isOffline = false;
+});
+
+window.addEventListener('error', (e) => {
+  console.error('GLOBAL ERROR', e.error);
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('PROMISE ERROR', e.reason);
+});
+
+checkVersion();
