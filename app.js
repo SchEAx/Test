@@ -24,22 +24,59 @@ const el = {
   saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn"), todaySaleTotal: document.getElementById("todaySaleTotal"), todaySaleQty: document.getElementById("todaySaleQty"), todayCashTotal: document.getElementById("todayCashTotal"), todayCardTotal: document.getElementById("todayCardTotal"), topSaleProducts: document.getElementById("topSaleProducts"), currentStaffSelect: document.getElementById("currentStaffSelect"), staffRoleBadge: document.getElementById("staffRoleBadge"), staffEditor: document.getElementById("staffEditor"), staffEditorBody: document.getElementById("staffEditorBody"), printLastSaleBtn: document.getElementById("printLastSaleBtn"), cancelLastSaleBtn: document.getElementById("cancelLastSaleBtn"), productImage: document.getElementById("productImage"), reportStartDate: document.getElementById("reportStartDate"), reportEndDate: document.getElementById("reportEndDate"), reportSearchInput: document.getElementById("reportSearchInput"), criticalSearchInput: document.getElementById("criticalSearchInput"), historySearchInput: document.getElementById("historySearchInput"),
   operationBrandFilter: document.getElementById("operationBrandFilter"), operationCategoryFilter: document.getElementById("operationCategoryFilter"), operationSearchInput: document.getElementById("operationSearchInput"), operationResultBox: document.getElementById("operationResultBox"),
   notificationBellBtn: document.getElementById("notificationBellBtn"), notificationUnreadCount: document.getElementById("notificationUnreadCount"), notificationList: document.getElementById("notificationList"),
-  loginOverlay: document.getElementById("loginOverlay"), appShell: document.getElementById("appShell"), loginStaffSelect: document.getElementById("loginStaffSelect"), loginPasswordInput: document.getElementById("loginPasswordInput"), loginBtn: document.getElementById("loginBtn"), logoutBtn: document.getElementById("logoutBtn"), activeUserName: document.getElementById("activeUserName"), activeUserRole: document.getElementById("activeUserRole"), usersList: document.getElementById("usersList"), activityLogList: document.getElementById("activityLogList")
+  loginOverlay: document.getElementById("loginOverlay"), appShell: document.getElementById("appShell"), loginStaffSelect: document.getElementById("loginStaffSelect"), loginPasswordInput: document.getElementById("loginPasswordInput"), loginBtn: document.getElementById("loginBtn"), logoutBtn: document.getElementById("logoutBtn"), activeUserName: document.getElementById("activeUserName"), activeUserRole: document.getElementById("activeUserRole"), usersList: document.getElementById("usersList"), activityLogList: document.getElementById("activityLogList"), rolePermissionEditor: document.getElementById("rolePermissionEditor")
 };
 
 
 const SESSION_STORE_KEY = "garage_current_session_v2";
 const STAFF_META_STORE_KEY = "garage_staff_meta_v2";
 const ACTIVITY_STORE_KEY = "garage_activity_logs_v2";
-const ROLE_PERMISSIONS = {
-  admin: ["requests", "operation", "search", "add", "movements", "sale", "reports", "critical", "notifications", "history", "users"],
-  depo: ["requests", "operation", "search", "movements", "critical", "notifications", "history"],
-  kasa: ["requests", "search", "sale", "reports", "notifications", "history"],
+const ROLE_PERMISSION_STORE_KEY = "garage_role_permissions_v1";
+const TAB_DEFINITIONS = [
+  { key: "requests", label: "Depo" },
+  { key: "operation", label: "İşlem" },
+  { key: "search", label: "Ara" },
+  { key: "add", label: "Ürün Ekle" },
+  { key: "movements", label: "Hareketler" },
+  { key: "sale", label: "Hızlı Satış" },
+  { key: "reports", label: "Raporlar" },
+  { key: "critical", label: "Kritik Stok" },
+  { key: "notifications", label: "Bildirimler" },
+  { key: "history", label: "Plaka Geçmişi" },
+  { key: "users", label: "Kullanıcılar / Yetkiler" }
+];
+const ALL_TAB_KEYS = TAB_DEFINITIONS.map(t => t.key);
+const DEFAULT_ROLE_PERMISSIONS = {
+  admin: [...ALL_TAB_KEYS],
+  depo: ["requests", "operation", "search", "add", "movements", "critical", "notifications"],
+  kasa: ["search", "sale", "reports", "history"],
   satis: ["requests", "search", "sale", "notifications", "history"],
-  usta: ["requests", "search", "notifications", "history"],
+  usta: ["requests", "search", "notifications", "history"]
 };
 const ROLE_DEFAULT_TAB = { admin: "requests", depo: "requests", kasa: "sale", satis: "sale", usta: "requests" };
-function permissionsForRole(role) { return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.kasa; }
+function normalizeRolePermissions(data) {
+  const output = {};
+  Object.keys(DEFAULT_ROLE_PERMISSIONS).forEach(role => {
+    const incoming = Array.isArray(data?.[role]) ? data[role] : DEFAULT_ROLE_PERMISSIONS[role];
+    output[role] = [...new Set(incoming.filter(tab => ALL_TAB_KEYS.includes(tab)))];
+    if (role === "admin") output[role] = [...ALL_TAB_KEYS];
+    if (!output[role].length) output[role] = [...DEFAULT_ROLE_PERMISSIONS[role]];
+  });
+  return output;
+}
+function readRolePermissions() {
+  try {
+    return normalizeRolePermissions(JSON.parse(localStorage.getItem(ROLE_PERMISSION_STORE_KEY) || "null"));
+  } catch {
+    return normalizeRolePermissions(null);
+  }
+}
+function writeRolePermissions(permissions) {
+  const normalized = normalizeRolePermissions(permissions);
+  localStorage.setItem(ROLE_PERMISSION_STORE_KEY, JSON.stringify(normalized));
+  return normalized;
+}
+function permissionsForRole(role) { return readRolePermissions()[role] || readRolePermissions().kasa; }
 function canAccessTab(tab, role = currentStaff().role) { return permissionsForRole(role).includes(tab); }
 function readStaffMeta() { try { return JSON.parse(localStorage.getItem(STAFF_META_STORE_KEY) || "{}"); } catch { return {}; } }
 function writeStaffMeta(meta) { localStorage.setItem(STAFF_META_STORE_KEY, JSON.stringify(meta || {})); }
@@ -73,7 +110,7 @@ function updateUserPill() {
 function applyRoleVisibility() {
   const staff = currentStaff();
   const allowed = new Set(permissionsForRole(staff.role));
-  ["requests", "operation", "search", "add", "movements", "sale", "reports", "critical", "notifications", "history", "users"].forEach(tab => {
+  ALL_TAB_KEYS.forEach(tab => {
     const nav = document.getElementById("nav-" + tab);
     if (nav) nav.classList.toggle("hidden", !allowed.has(tab));
   });
@@ -123,6 +160,7 @@ function initAuthGate() {
   updateUserPill();
   applyRoleVisibility();
   renderUsersList();
+  renderRolePermissionEditor();
 }
 window.logoutCurrentUser = function() {
   const staff = currentStaff();
@@ -152,6 +190,7 @@ async function logActivity(action, description, entity_table = null, entity_id =
   }
   renderActivityLogs();
   renderUsersList();
+  renderRolePermissionEditor();
 }
 async function loadActivityLogs() {
   let rows = readLocalActivityLogs();
@@ -186,6 +225,58 @@ function renderUsersList() {
   }).join("");
 }
 window.renderUsersList = renderUsersList;
+
+function renderRolePermissionEditor() {
+  if (!el.rolePermissionEditor) return;
+  const staff = currentStaff();
+  if (staff.role !== "admin") {
+    el.rolePermissionEditor.innerHTML = `<div class="empty-state">Menü yetkilerini sadece Admin düzenleyebilir.</div>`;
+    return;
+  }
+  const permissions = readRolePermissions();
+  const editableRoles = ["depo", "kasa", "satis", "usta"];
+  el.rolePermissionEditor.innerHTML = editableRoles.map(role => `
+    <div class="permission-role-card">
+      <div class="permission-role-head">
+        <strong>${roleLabel(role)}</strong>
+        <small>${(permissions[role] || []).length} sekme aktif</small>
+      </div>
+      <div class="permission-check-grid">
+        ${TAB_DEFINITIONS.filter(tab => tab.key !== "users").map(tab => `
+          <label class="permission-check">
+            <input type="checkbox" data-role-permission="${role}" value="${tab.key}" ${(permissions[role] || []).includes(tab.key) ? "checked" : ""} />
+            <span>${escapeHtml(tab.label)}</span>
+          </label>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+}
+window.renderRolePermissionEditor = renderRolePermissionEditor;
+
+window.saveRolePermissions = function() {
+  if (!requireRoleAction(["admin"], "Menü yetkilerini sadece Admin düzenleyebilir")) return;
+  const current = readRolePermissions();
+  ["depo", "kasa", "satis", "usta"].forEach(role => {
+    current[role] = [...document.querySelectorAll(`[data-role-permission="${role}"]:checked`)].map(input => input.value);
+  });
+  writeRolePermissions(current);
+  applyRoleVisibility();
+  renderRolePermissionEditor();
+  logActivity("role_permissions", "Rol bazlı menü yetkileri güncellendi", "permissions", "menu");
+  showToast("Menü yetkileri kaydedildi ✅");
+};
+
+window.resetRolePermissions = function() {
+  if (!requireRoleAction(["admin"], "Menü yetkilerini sadece Admin sıfırlayabilir")) return;
+  if (!confirm("Menü yetkileri varsayılana dönsün mü?")) return;
+  localStorage.removeItem(ROLE_PERMISSION_STORE_KEY);
+  applyRoleVisibility();
+  renderRolePermissionEditor();
+  logActivity("role_permissions_reset", "Rol bazlı menü yetkileri varsayılana döndü", "permissions", "menu");
+  showToast("Menü yetkileri varsayılana döndü ✅");
+};
+
 function requireRoleAction(allowedRoles, message = "Bu işlem için yetkin yok") {
   const staff = currentStaff();
   if (!allowedRoles.includes(staff.role)) {
