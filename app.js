@@ -12,6 +12,7 @@ originalTitle: document.title,
   lastQuickSale: null,
   operationQty: {},
   notifications: [], notificationFilter: "all", unreadNotificationCount: 0, notificationTableReady: true,
+  activityLogs: [], activityLogTableReady: true, authReady: false, currentUser: null,
 };
 
 const el = {
@@ -22,8 +23,182 @@ const el = {
   stockRequestsBox: document.getElementById("stockRequestsBox"), reservationPanel: document.getElementById("reservationPanel"), requestedTextBox: document.getElementById("requestedTextBox"), productSearchInput: document.getElementById("productSearchInput"), productMatchBox: document.getElementById("productMatchBox"), toast: document.getElementById("toast"),
   saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn"), todaySaleTotal: document.getElementById("todaySaleTotal"), todaySaleQty: document.getElementById("todaySaleQty"), todayCashTotal: document.getElementById("todayCashTotal"), todayCardTotal: document.getElementById("todayCardTotal"), topSaleProducts: document.getElementById("topSaleProducts"), currentStaffSelect: document.getElementById("currentStaffSelect"), staffRoleBadge: document.getElementById("staffRoleBadge"), staffEditor: document.getElementById("staffEditor"), staffEditorBody: document.getElementById("staffEditorBody"), printLastSaleBtn: document.getElementById("printLastSaleBtn"), cancelLastSaleBtn: document.getElementById("cancelLastSaleBtn"), productImage: document.getElementById("productImage"), reportStartDate: document.getElementById("reportStartDate"), reportEndDate: document.getElementById("reportEndDate"), reportSearchInput: document.getElementById("reportSearchInput"), criticalSearchInput: document.getElementById("criticalSearchInput"), historySearchInput: document.getElementById("historySearchInput"),
   operationBrandFilter: document.getElementById("operationBrandFilter"), operationCategoryFilter: document.getElementById("operationCategoryFilter"), operationSearchInput: document.getElementById("operationSearchInput"), operationResultBox: document.getElementById("operationResultBox"),
-  notificationBellBtn: document.getElementById("notificationBellBtn"), notificationUnreadCount: document.getElementById("notificationUnreadCount"), notificationList: document.getElementById("notificationList")
+  notificationBellBtn: document.getElementById("notificationBellBtn"), notificationUnreadCount: document.getElementById("notificationUnreadCount"), notificationList: document.getElementById("notificationList"),
+  loginOverlay: document.getElementById("loginOverlay"), appShell: document.getElementById("appShell"), loginStaffSelect: document.getElementById("loginStaffSelect"), loginPasswordInput: document.getElementById("loginPasswordInput"), loginBtn: document.getElementById("loginBtn"), logoutBtn: document.getElementById("logoutBtn"), activeUserName: document.getElementById("activeUserName"), activeUserRole: document.getElementById("activeUserRole"), usersList: document.getElementById("usersList"), activityLogList: document.getElementById("activityLogList")
 };
+
+
+const SESSION_STORE_KEY = "garage_current_session_v2";
+const STAFF_META_STORE_KEY = "garage_staff_meta_v2";
+const ACTIVITY_STORE_KEY = "garage_activity_logs_v2";
+const ROLE_PERMISSIONS = {
+  admin: ["requests", "operation", "search", "add", "movements", "sale", "reports", "critical", "notifications", "history", "users"],
+  depo: ["requests", "operation", "search", "movements", "critical", "notifications", "history"],
+  kasa: ["requests", "search", "sale", "reports", "notifications", "history"],
+  satis: ["requests", "search", "sale", "notifications", "history"],
+  usta: ["requests", "search", "notifications", "history"],
+};
+const ROLE_DEFAULT_TAB = { admin: "requests", depo: "requests", kasa: "sale", satis: "sale", usta: "requests" };
+function permissionsForRole(role) { return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.kasa; }
+function canAccessTab(tab, role = currentStaff().role) { return permissionsForRole(role).includes(tab); }
+function readStaffMeta() { try { return JSON.parse(localStorage.getItem(STAFF_META_STORE_KEY) || "{}"); } catch { return {}; } }
+function writeStaffMeta(meta) { localStorage.setItem(STAFF_META_STORE_KEY, JSON.stringify(meta || {})); }
+function updateStaffMeta(name, patch) {
+  const key = normalizeStaffName(name);
+  if (!key) return;
+  const meta = readStaffMeta();
+  meta[key] = { ...(meta[key] || {}), ...(patch || {}) };
+  writeStaffMeta(meta);
+}
+function currentSession() { try { return JSON.parse(localStorage.getItem(SESSION_STORE_KEY) || "null"); } catch { return null; } }
+function setCurrentSession(staff) {
+  const session = { name: staff.name, role: staff.role, loginAt: new Date().toISOString(), sessionId: Date.now() + "_" + Math.random().toString(16).slice(2) };
+  localStorage.setItem(SESSION_STORE_KEY, JSON.stringify(session));
+  localStorage.setItem(CURRENT_STAFF_STORE_KEY, staff.name);
+  updateStaffMeta(staff.name, { lastLoginAt: session.loginAt, lastSeenAt: session.loginAt, role: staff.role });
+  state.currentUser = session;
+  return session;
+}
+function clearCurrentSession() { localStorage.removeItem(SESSION_STORE_KEY); state.currentUser = null; }
+function populateLoginStaffSelect() {
+  if (!el.loginStaffSelect) return;
+  const staff = readStaffList();
+  el.loginStaffSelect.innerHTML = staff.map(s => `<option value="${escapeHtml(s.name)}">${escapeHtml(s.name)} — ${roleLabel(s.role)}</option>`).join("");
+}
+function updateUserPill() {
+  const staff = currentStaff();
+  if (el.activeUserName) el.activeUserName.textContent = staff.name || "-";
+  if (el.activeUserRole) el.activeUserRole.textContent = roleLabel(staff.role || "kasa");
+}
+function applyRoleVisibility() {
+  const staff = currentStaff();
+  const allowed = new Set(permissionsForRole(staff.role));
+  ["requests", "operation", "search", "add", "movements", "sale", "reports", "critical", "notifications", "history", "users"].forEach(tab => {
+    const nav = document.getElementById("nav-" + tab);
+    if (nav) nav.classList.toggle("hidden", !allowed.has(tab));
+  });
+  document.body.dataset.role = staff.role || "kasa";
+}
+function showLogin() {
+  populateLoginStaffSelect();
+  if (el.loginOverlay) el.loginOverlay.classList.remove("hidden");
+  if (el.appShell) el.appShell.classList.add("locked");
+  setTimeout(() => el.loginPasswordInput?.focus(), 100);
+}
+function hideLogin() {
+  if (el.loginOverlay) el.loginOverlay.classList.add("hidden");
+  if (el.appShell) el.appShell.classList.remove("locked");
+}
+function loginWithSelectedStaff() {
+  const name = el.loginStaffSelect?.value || "";
+  const pass = String(el.loginPasswordInput?.value || "").trim();
+  const staff = readStaffList().find(s => s.name === name);
+  if (!staff) return showToast("Personel bulunamadı", true);
+  if (pass !== normalizeStaffPassword(staff.password, defaultPasswordForRole(staff.role))) {
+    return showToast("Şifre hatalı", true);
+  }
+  setCurrentSession(staff);
+  if (el.loginPasswordInput) el.loginPasswordInput.value = "";
+  hideLogin();
+  updateUserPill();
+  renderStaffSelector();
+  applyRoleVisibility();
+  const target = canAccessTab(state.activeTab, staff.role) ? state.activeTab : (ROLE_DEFAULT_TAB[staff.role] || "requests");
+  switchTab(target);
+  logActivity("login", `${staff.name} giriş yaptı`, "staff", staff.name);
+  showToast(`Hoş geldin ${staff.name} ✅`);
+}
+function initAuthGate() {
+  populateLoginStaffSelect();
+  const session = currentSession();
+  const staff = session ? readStaffList().find(s => s.name === session.name) : null;
+  if (staff) {
+    localStorage.setItem(CURRENT_STAFF_STORE_KEY, staff.name);
+    state.currentUser = session;
+    hideLogin();
+    updateStaffMeta(staff.name, { lastSeenAt: new Date().toISOString(), role: staff.role });
+  } else {
+    showLogin();
+  }
+  updateUserPill();
+  applyRoleVisibility();
+  renderUsersList();
+}
+window.logoutCurrentUser = function() {
+  const staff = currentStaff();
+  logActivity("logout", `${staff.name} çıkış yaptı`, "staff", staff.name);
+  clearCurrentSession();
+  showLogin();
+  showToast("Çıkış yapıldı");
+};
+function localActivityPush(item) {
+  const logs = readLocalActivityLogs();
+  logs.unshift(item);
+  localStorage.setItem(ACTIVITY_STORE_KEY, JSON.stringify(logs.slice(0, 300)));
+}
+function readLocalActivityLogs() { try { return JSON.parse(localStorage.getItem(ACTIVITY_STORE_KEY) || "[]"); } catch { return []; } }
+async function logActivity(action, description, entity_table = null, entity_id = null) {
+  const staff = currentStaff();
+  const item = { id: "local_" + Date.now() + "_" + Math.random().toString(16).slice(2), actor_name: staff.name, actor_role: staff.role, action, description, entity_table, entity_id: entity_id ? String(entity_id) : null, created_at: new Date().toISOString() };
+  localActivityPush(item);
+  if (state.activityLogTableReady) {
+    try {
+      const { error } = await supabaseClient.from("app_activity_logs").insert({ actor_name: item.actor_name, actor_role: item.actor_role, action: item.action, description: item.description, entity_table: item.entity_table, entity_id: item.entity_id });
+      if (error) throw error;
+    } catch (err) {
+      console.warn("app_activity_logs tablosu yok veya erişilemiyor, yerel log tutuluyor:", err);
+      state.activityLogTableReady = false;
+    }
+  }
+  renderActivityLogs();
+  renderUsersList();
+}
+async function loadActivityLogs() {
+  let rows = readLocalActivityLogs();
+  if (state.activityLogTableReady) {
+    try {
+      const { data, error } = await supabaseClient.from("app_activity_logs").select("*").order("created_at", { ascending: false }).limit(120);
+      if (error) throw error;
+      rows = data || rows;
+    } catch (err) {
+      console.warn("Aktivite logları Supabase'den alınamadı:", err);
+      state.activityLogTableReady = false;
+    }
+  }
+  state.activityLogs = rows || [];
+  renderActivityLogs();
+}
+window.loadActivityLogs = loadActivityLogs;
+function renderActivityLogs() {
+  if (!el.activityLogList) return;
+  const rows = (state.activityLogs.length ? state.activityLogs : readLocalActivityLogs()).slice(0, 80);
+  el.activityLogList.innerHTML = rows.length ? rows.map(r => `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(r.actor_name || "-")}</strong><div class="muted">${escapeHtml(roleLabel(r.actor_role) || r.actor_role || "-")} · ${escapeHtml(r.action || "-")}</div></div><span class="muted">${formatDate(r.created_at)}</span></div><div>${escapeHtml(r.description || "-")}</div>${r.entity_table ? `<div class="muted">${escapeHtml(r.entity_table)} ${r.entity_id ? "#" + escapeHtml(String(r.entity_id).slice(0, 8)) : ""}</div>` : ""}</div>`).join("") : `<div class="empty-state">Henüz işlem kaydı yok</div>`;
+}
+function renderUsersList() {
+  if (!el.usersList) return;
+  const meta = readStaffMeta();
+  const active = currentStaffName();
+  const staff = readStaffList();
+  el.usersList.innerHTML = staff.map(s => {
+    const m = meta[s.name] || {};
+    const online = s.name === active && !!currentSession();
+    return `<div class="user-row ${online ? "online" : ""}"><div class="user-avatar">${escapeHtml((s.name || "?").slice(0,1).toLocaleUpperCase("tr-TR"))}</div><div><strong>${escapeHtml(s.name)}</strong><div class="muted">${roleLabel(s.role)} · Son giriş: ${m.lastLoginAt ? formatDate(m.lastLoginAt) : "-"}</div><div class="muted">Son görünme: ${m.lastSeenAt ? formatDate(m.lastSeenAt) : "-"}</div></div><span class="user-status">${online ? "Çevrimiçi" : "Pasif"}</span></div>`;
+  }).join("");
+}
+window.renderUsersList = renderUsersList;
+function requireRoleAction(allowedRoles, message = "Bu işlem için yetkin yok") {
+  const staff = currentStaff();
+  if (!allowedRoles.includes(staff.role)) {
+    showToast(message, true);
+    logActivity("blocked", `${staff.name} yetkisiz işlem denedi: ${message}`, "permission", staff.role);
+    return false;
+  }
+  return true;
+}
+function actorSuffix() {
+  const staff = currentStaff();
+  return ` · Personel: ${staff.name} (${roleLabel(staff.role)})`;
+}
 
 function showToast(message, isError = false) {
   el.toast.textContent = message; el.toast.classList.remove("hidden");
@@ -433,7 +608,7 @@ window.clearOperationFilters = function() {
   if (el.operationSearchInput) el.operationSearchInput.value = "";
   renderOperationResults();
 };
-window.operationStockAction = async function(id, type) {
+window.operationStockAction = async function(id, type) { if (!requireRoleAction(["admin", "depo"], "Stok giriş/çıkış yetkisi sadece Admin/Depo")) return;
   const product = state.products.find((p) => String(p.id) === String(id));
   if (!product) return showToast("Ürün bulunamadı", true);
   const quantity = getOperationQty(id);
@@ -450,7 +625,7 @@ window.operationStockAction = async function(id, type) {
       product_id: id,
       movement_type: type,
       quantity,
-      description: `Hızlı işlem ekranı manuel ${label}`
+      description: `Hızlı işlem ekranı manuel ${label}${actorSuffix()}`
     });
     if (movementError) throw movementError;
     if (type === "cikis") {
@@ -467,6 +642,7 @@ window.operationStockAction = async function(id, type) {
         });
       }
     }
+    await logActivity("stock_" + type, `${product.name || product.category} için ${quantity} adet ${label}`, "stock_products", id);
     showToast(`${quantity} adet ${label} kaydedildi ✅`);
     await Promise.all([loadProducts(), loadMovements()]);
     renderMovementSearchResults();
@@ -490,15 +666,15 @@ function renderStockRequests() {
 window.setRequestFilter = function(status) { state.requestFilter = status; renderStockRequests(); };
 function clearProductForm() { [el.productId, el.barcode, el.productBrand, el.category, el.carBrand, el.carModel, el.carType, el.vehicleYear, el.stock, el.minStock, el.location, el.productImage, el.note].filter(Boolean).forEach((x) => x.value = ""); }
 function fillProductForm(product) { el.productId.value = product.id || ""; el.barcode.value = product.barcode || ""; el.productBrand.value = product.productBrand || ""; el.category.value = product.category || ""; el.carBrand.value = product.carBrand || ""; el.carModel.value = product.carModel || ""; el.carType.value = product.carType || ""; el.vehicleYear.value = product.vehicleYear || ""; el.stock.value = product.stock ?? ""; el.minStock.value = product.minStock ?? ""; el.location.value = product.location || ""; if (el.productImage) el.productImage.value = product.imageUrl || ""; el.note.value = product.note || ""; switchTab("add"); window.scrollTo({ top: 0, behavior: "smooth" }); }
-window.editProduct = function(id) { const product = state.products.find((p) => String(p.id) === String(id)); if (!product) return showToast("Ürün bulunamadı", true); fillProductForm(product); };
-window.deleteProduct = async function(id) { if (!confirm("Bu ürünü silmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.from("stock_products").delete().eq("id", id); if (error) throw error; showToast("Ürün silindi"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Ürün silinemedi", true); } finally { setLoading(false); } };
-window.quickStockAction = async function(id, type) {
+window.editProduct = function(id) { if (!requireRoleAction(["admin", "depo"], "Ürün düzenleme yetkisi sadece Admin/Depo")) return; const product = state.products.find((p) => String(p.id) === String(id)); if (!product) return showToast("Ürün bulunamadı", true); fillProductForm(product); };
+window.deleteProduct = async function(id) { if (!requireRoleAction(["admin"], "Ürün silme yetkisi sadece Admin")) return; const product = state.products.find((p) => String(p.id) === String(id)); if (!confirm("Bu ürünü silmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.from("stock_products").delete().eq("id", id); if (error) throw error; await logActivity("product_delete", `Ürün silindi: ${product?.name || id}`, "stock_products", id); showToast("Ürün silindi"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Ürün silinemedi", true); } finally { setLoading(false); } };
+window.quickStockAction = async function(id, type) { if (!requireRoleAction(["admin", "depo"], "Stok giriş/çıkış yetkisi sadece Admin/Depo")) return;
   const product = state.products.find((p) => String(p.id) === String(id)); if (!product) return showToast("Ürün bulunamadı", true);
   const qtyText = prompt(`${product.category || product.name} için ${type === "giris" ? "giriş" : "çıkış"} miktarı gir:`, "1"); if (qtyText === null) return;
   const quantity = Number(qtyText); if (!quantity || quantity <= 0) return showToast("Geçerli miktar gir", true);
   const available = Number(product.stock || 0) - Number(product.reserved || 0); if (type === "cikis" && available < quantity) return showToast(`Yeterli kullanılabilir stok yok. Kullanılabilir: ${available}`, true);
   if (!confirm(`${product.category || product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
-  try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}` }); if (movementError) throw movementError; if (type === "cikis") { const minStock = Number(product.minStock || 0); const willAvailable = newQty - Number(product.reserved || 0); if (willAvailable <= minStock) { await createNotification({ title: "Kritik stok uyarısı", message: `${product.name || product.category || "Ürün"} kritik seviyede. Kullanılabilir: ${willAvailable}, Min: ${minStock}`, type: "critical_stock", target_role: "depo", source_table: "stock_products", source_id: id }); } } showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
+  try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}${actorSuffix()}` }); if (movementError) throw movementError; if (type === "cikis") { const minStock = Number(product.minStock || 0); const willAvailable = newQty - Number(product.reserved || 0); if (willAvailable <= minStock) { await createNotification({ title: "Kritik stok uyarısı", message: `${product.name || product.category || "Ürün"} kritik seviyede. Kullanılabilir: ${willAvailable}, Min: ${minStock}`, type: "critical_stock", target_role: "depo", source_table: "stock_products", source_id: id }); } } showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
 };
 
 function formatSaleMoney(value) {
@@ -611,6 +787,7 @@ const CURRENT_STAFF_STORE_KEY = "garage_current_staff_v1";
 const DEFAULT_STAFF_LIST = [
   { name: "Admin", role: "admin", password: "0000" },
   { name: "Kasa", role: "kasa", password: "1111" },
+  { name: "Satış", role: "satis", password: "4444" },
   { name: "Depo", role: "depo", password: "2222" },
   { name: "Usta", role: "usta", password: "3333" }
 ];
@@ -625,7 +802,7 @@ function normalizeStaffPassword(value, fallback = "1234") {
 }
 
 function roleLabel(role) {
-  return ({ admin: "Admin", kasa: "Kasa", depo: "Depo", usta: "Usta" })[role] || "Personel";
+  return ({ admin: "Admin", kasa: "Kasa", depo: "Depo", satis: "Satış", usta: "Usta" })[role] || "Personel";
 }
 
 function defaultPasswordForRole(role) {
@@ -727,6 +904,9 @@ function renderStaffSelector() {
   el.currentStaffSelect.innerHTML = staff.map(s => `<option value="${escapeHtml(s.name)}" ${s.name === current ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("");
   const active = currentStaff();
   if (el.staffRoleBadge) el.staffRoleBadge.textContent = roleLabel(active.role);
+  updateUserPill();
+  applyRoleVisibility();
+  renderUsersList();
 }
 
 window.setCurrentStaff = function(name) {
@@ -755,6 +935,7 @@ function staffEditorRow(item = { name: "", role: "kasa", password: "" }) {
       <select data-staff-role>
         <option value="admin" ${item.role === "admin" ? "selected" : ""}>Admin</option>
         <option value="kasa" ${item.role === "kasa" ? "selected" : ""}>Kasa</option>
+        <option value="satis" ${item.role === "satis" ? "selected" : ""}>Satış</option>
         <option value="depo" ${item.role === "depo" ? "selected" : ""}>Depo</option>
         <option value="usta" ${item.role === "usta" ? "selected" : ""}>Usta</option>
       </select>
@@ -764,6 +945,7 @@ function staffEditorRow(item = { name: "", role: "kasa", password: "" }) {
 }
 
 window.openStaffEditor = function() {
+  if (!requireRoleAction(["admin"], "Personel yönetimi sadece Admin")) return;
   if (!el.staffEditor || !el.staffEditorBody) return;
   if (!verifyAdminPassword()) return;
 
@@ -1450,12 +1632,31 @@ async function searchProductsForRequest(query = "", autoSuggest = false) {
 }
 
 
-window.reserveProductForRequest = async function(productId) {
+window.reserveProductForRequest = async function(productId) { if (!requireRoleAction(["admin", "depo"], "Rezervasyon yetkisi sadece Admin/Depo")) return;
   if (!state.selectedStockRequestId) return showToast("Talep seçilmedi", true); const quantity = Number(document.getElementById("qty_" + productId)?.value || 1); if (!quantity || quantity <= 0) return showToast("Geçerli adet gir", true);
   try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); renderSelectedRequestDetail(stillSelected); searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
 };
-window.cancelReservation = async function(requestId) { if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.rpc("cancel_stock_reservation", { p_request_id: requestId }); if (error) throw error; showToast("Rezerv iptal edildi ✅"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Rezerv iptal edilemedi", true); } finally { setLoading(false); } };
-function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "operation", "movements", "sale", "reports", "critical", "notifications", "history"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") {
+window.cancelReservation = async function(requestId) { if (!requireRoleAction(["admin", "depo"], "Rezerv iptali yetkisi sadece Admin/Depo")) return; if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.rpc("cancel_stock_reservation", { p_request_id: requestId }); if (error) throw error; showToast("Rezerv iptal edildi ✅"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Rezerv iptal edilemedi", true); } finally { setLoading(false); } };
+function switchTab(tab) {
+  const staff = currentStaff();
+  if (!canAccessTab(tab, staff.role)) {
+    showToast(`${roleLabel(staff.role)} yetkisi bu sayfayı açamaz`, true);
+    tab = ROLE_DEFAULT_TAB[staff.role] || "requests";
+  }
+  state.activeTab = tab;
+  ["search", "add", "requests", "operation", "movements", "sale", "reports", "critical", "notifications", "history", "users"].forEach((key) => {
+    const page = document.getElementById("page-" + key);
+    const nav = document.getElementById("nav-" + key);
+    if (page) page.classList.add("hidden");
+    if (nav) nav.classList.remove("active");
+  });
+  const activePage = document.getElementById("page-" + tab);
+  const activeNav = document.getElementById("nav-" + tab);
+  if (activePage) activePage.classList.remove("hidden");
+  if (activeNav) activeNav.classList.add("active");
+  updateStaffMeta(staff.name, { lastSeenAt: new Date().toISOString(), role: staff.role });
+  renderUsersList();
+  if (tab === "requests") {
   state.newRequestCount = 0;
   updateNewRequestAlert();
   loadStockRequests();
@@ -1474,6 +1675,7 @@ if (tab === "reports") renderReports();
 if (tab === "critical") renderCriticalStock();
 if (tab === "notifications") { loadNotifications(); }
 if (tab === "history") renderPlateHistory();
+if (tab === "users") { renderUsersList(); loadActivityLogs(); }
 }
 window.switchTab = switchTab;
 function showUpdateNotice(newVersion) {
@@ -1767,7 +1969,7 @@ window.renderPlateHistory = function() {
   moveBox.innerHTML = moves.length ? moves.map(m => `<div class="movement-item"><div class="movement-top"><div><strong>${escapeHtml(m.stock_products?.product_name || m.description || "-")}</strong><div class="muted">${escapeHtml(m.description || "-")}</div></div><span class="badge ${String(m.movement_type || "").includes("iade") ? "giris" : "cikis"}">${escapeHtml(m.movement_type || "-")}</span></div><div>Miktar: <strong>${Number(m.quantity || 0)}</strong></div><div>Plaka: <strong>${escapeHtml(m.plate || "-")}</strong></div><div>Kayıt No: <strong>${escapeHtml(m.record_no || "-")}</strong></div><div>Tarih: <strong>${formatDate(m.created_at)}</strong></div></div>`).join("") : `<div class="empty-state">Hareket bulunamadı</div>`;
 };
 
-el.productForm.addEventListener("submit", async (e) => { e.preventDefault(); const payload = { id: el.productId.value.trim(), barcode: el.barcode.value.trim(), productBrand: el.productBrand.value.trim(), category: el.category.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(), carType: el.carType.value.trim(), vehicleYear: el.vehicleYear.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim(), imageUrl: el.productImage?.value?.trim() || "" }; if (!payload.category || !payload.carBrand || !payload.carModel) return showToast("Zorunlu alanlar: Ürün Kategorisi, Araç Markası, Araç Modeli", true); try { setLoading(true); if (payload.id) { const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id); if (error) throw error; showToast("Ürün güncellendi"); } else { const { error } = await supabaseClient.from("stock_products").insert(toProductRow(payload)); if (error) throw error; showToast("Ürün kaydedildi"); } clearProductForm(); await loadProducts(); } catch (err) { console.error(err); showToast(err.message || "Ürün kaydedilemedi", true); } finally { setLoading(false); } });
+el.productForm.addEventListener("submit", async (e) => { e.preventDefault(); if (!requireRoleAction(["admin", "depo"], "Ürün kaydetme yetkisi sadece Admin/Depo")) return; const payload = { id: el.productId.value.trim(), barcode: el.barcode.value.trim(), productBrand: el.productBrand.value.trim(), category: el.category.value.trim(), carBrand: el.carBrand.value.trim(), carModel: el.carModel.value.trim(), carType: el.carType.value.trim(), vehicleYear: el.vehicleYear.value.trim(), stock: el.stock.value.trim(), minStock: el.minStock.value.trim(), location: el.location.value.trim(), note: el.note.value.trim(), imageUrl: el.productImage?.value?.trim() || "" }; if (!payload.category || !payload.carBrand || !payload.carModel) return showToast("Zorunlu alanlar: Ürün Kategorisi, Araç Markası, Araç Modeli", true); try { setLoading(true); if (payload.id) { const { error } = await supabaseClient.from("stock_products").update(toProductRow(payload)).eq("id", payload.id); if (error) throw error; await logActivity("product_update", `Ürün güncellendi: ${payload.category} ${payload.carBrand} ${payload.carModel}`, "stock_products", payload.id); showToast("Ürün güncellendi"); } else { const { data, error } = await supabaseClient.from("stock_products").insert(toProductRow(payload)).select("id").single(); if (error) throw error; await logActivity("product_insert", `Ürün eklendi: ${payload.category} ${payload.carBrand} ${payload.carModel}`, "stock_products", data?.id); showToast("Ürün kaydedildi"); } clearProductForm(); await loadProducts(); } catch (err) { console.error(err); showToast(err.message || "Ürün kaydedilemedi", true); } finally { setLoading(false); } });
 el.clearProductBtn.addEventListener("click", clearProductForm); el.refreshBtn.addEventListener("click", loadAll); el.enableNotifyBtn.addEventListener("click", enablePushNotifications); el.searchInput.addEventListener("input", applySearch); el.movementSearchInput.addEventListener("input", renderMovementSearchResults); el.productSearchInput.addEventListener("input", () => searchProductsForRequest(el.productSearchInput.value));
 if (el.operationBrandFilter) el.operationBrandFilter.addEventListener("change", renderOperationResults);
 if (el.operationCategoryFilter) el.operationCategoryFilter.addEventListener("change", renderOperationResults);
@@ -1791,8 +1993,11 @@ if (el.clearSaleBtn) el.clearSaleBtn.addEventListener("click", clearSaleCart);
 if (el.printLastSaleBtn) el.printLastSaleBtn.addEventListener("click", printLastQuickSale);
 if (el.cancelLastSaleBtn) el.cancelLastSaleBtn.addEventListener("click", cancelLastQuickSale);
 if (el.currentStaffSelect) el.currentStaffSelect.addEventListener("change", (e) => setCurrentStaff(e.target.value));
+if (el.loginBtn) el.loginBtn.addEventListener("click", loginWithSelectedStaff);
+if (el.loginPasswordInput) el.loginPasswordInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loginWithSelectedStaff(); });
+if (el.logoutBtn) el.logoutBtn.addEventListener("click", logoutCurrentUser);
 if (el.reportSearchInput) el.reportSearchInput.addEventListener("input", renderReports);
 if (el.criticalSearchInput) el.criticalSearchInput.addEventListener("input", renderCriticalStock);
 if (el.historySearchInput) el.historySearchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") renderPlateHistory(); });
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
-renderStaffSelector(); renderSaleFavorites(); loadLastQuickSale(); switchTab("requests"); updateNotifyButtonUI(); loadNotifications(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
+initAuthGate(); renderStaffSelector(); renderSaleFavorites(); loadLastQuickSale(); switchTab(canAccessTab("requests") ? "requests" : (ROLE_DEFAULT_TAB[currentStaff().role] || "requests")); updateNotifyButtonUI(); loadNotifications(); loadActivityLogs(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
