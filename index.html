@@ -22,6 +22,7 @@
         </div>
       </div>
       <div class="top-actions">
+        <button id="notificationBellBtn" class="btn ghost notification-bell" onclick="switchTab('notifications')">🔔 <span id="notificationUnreadCount" class="notification-count hidden">0</span></button>
         <button id="enableNotifyBtn" class="btn ghost">Bildirim Aç</button>
         <button id="refreshBtn" class="btn secondary">Yenile</button>
       </div>
@@ -39,6 +40,7 @@
       <button id="nav-sale" onclick="switchTab('sale')">Hızlı Satış</button>
       <button id="nav-reports" onclick="switchTab('reports')">Raporlar</button>
       <button id="nav-critical" onclick="switchTab('critical')">Kritik Stok</button>
+      <button id="nav-notifications" onclick="switchTab('notifications')">Bildirimler</button>
       <button id="nav-history" onclick="switchTab('history')">Plaka Geçmişi</button>
     </nav>
 
@@ -302,6 +304,33 @@
         </div>
         <input id="criticalSearchInput" class="search-input" type="text" placeholder="Kritik ürünlerde ara..." />
         <div id="criticalStockList" class="sale-product-list"><div class="empty-state">Kritik stok bekleniyor</div></div>
+      </section>
+    </div>
+
+
+    <div id="page-notifications" class="page hidden">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Bildirim Merkezi</h2>
+            <p class="muted">Depo talebi, kritik stok ve sistem uyarıları burada toplanır</p>
+          </div>
+          <div class="row-gap">
+            <button class="btn secondary" onclick="loadNotifications()">Yenile</button>
+            <button class="btn success" onclick="markAllNotificationsRead()">Tümünü Okundu Yap</button>
+            <button class="btn ghost" onclick="testInAppNotification()">Test Sesi</button>
+          </div>
+        </div>
+        <div class="notification-filter-row">
+          <button class="btn secondary" onclick="setNotificationFilter('all')">Tümü</button>
+          <button class="btn secondary" onclick="setNotificationFilter('unread')">Okunmamış</button>
+          <button class="btn secondary" onclick="setNotificationFilter('stock_request')">Depo Talebi</button>
+          <button class="btn secondary" onclick="setNotificationFilter('critical_stock')">Kritik Stok</button>
+          <button class="btn secondary" onclick="setNotificationFilter('system')">Sistem</button>
+        </div>
+        <div id="notificationList" class="notification-list">
+          <div class="empty-state">Bildirim bekleniyor...</div>
+        </div>
       </section>
     </div>
 
