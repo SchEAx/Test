@@ -32,6 +32,7 @@
 </div>
     <nav class="top-nav">
       <button id="nav-requests" onclick="switchTab('requests')">Depo</button>
+      <button id="nav-operation" onclick="switchTab('operation')">İşlem</button>
       <button id="nav-search" onclick="switchTab('search')">Ara</button>
       <button id="nav-add" onclick="switchTab('add')">Ürün Ekle</button>
       <button id="nav-movements" onclick="switchTab('movements')">Hareketler</button>
@@ -71,6 +72,46 @@
           <label>Stoktan Ürün Ara</label>
           <input id="productSearchInput" type="text" placeholder="Cam rüzgarlığı, Megane, paspas..." />
           <div id="productMatchBox" class="movement-search-list"><div class="empty-state">Ürün aramak için yazmaya başla</div></div>
+        </div>
+      </section>
+    </div>
+
+
+    <div id="page-operation" class="page hidden">
+      <section class="card">
+        <div class="section-head">
+          <div>
+            <h2>Hızlı Giriş / Çıkış</h2>
+            <p class="muted">Ürün kartına girmeden marka, kategori ve model filtresiyle hızlı stok işlemi yap</p>
+          </div>
+          <button class="btn secondary" onclick="clearOperationFilters()">Filtreleri Temizle</button>
+        </div>
+
+        <div class="operation-filter-grid">
+          <div>
+            <label>Araç Markası</label>
+            <select id="operationBrandFilter">
+              <option value="">Tüm markalar</option>
+            </select>
+          </div>
+          <div>
+            <label>Ürün Kategorisi</label>
+            <select id="operationCategoryFilter">
+              <option value="">Tüm kategoriler</option>
+            </select>
+          </div>
+          <div>
+            <label>Model / Ürün Ara</label>
+            <input id="operationSearchInput" type="text" placeholder="Megane 4, paspas, Rizline..." autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="operation-hint">
+          <strong>İpucu:</strong> Marka + kategori seçip sadece modeli yazarsan sonuç listesi çok daralır. Örn: Renault + Paspas + Megane 4.
+        </div>
+
+        <div id="operationResultBox" class="operation-result-list">
+          <div class="empty-state">Filtre seç veya ürün ara</div>
         </div>
       </section>
     </div>
