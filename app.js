@@ -11,6 +11,7 @@ originalTitle: document.title,
   saleCart: [],
   lastQuickSale: null,
   operationQty: {},
+  notifications: [], notificationFilter: "all", unreadNotificationCount: 0, notificationTableReady: true,
 };
 
 const el = {
@@ -20,7 +21,8 @@ const el = {
   saveProductBtn: document.getElementById("saveProductBtn"), clearProductBtn: document.getElementById("clearProductBtn"), movementSearchInput: document.getElementById("movementSearchInput"), movementSearchList: document.getElementById("movementSearchList"), searchInput: document.getElementById("searchInput"), productTableBody: document.getElementById("productTableBody"), movementList: document.getElementById("movementList"),
   stockRequestsBox: document.getElementById("stockRequestsBox"), reservationPanel: document.getElementById("reservationPanel"), requestedTextBox: document.getElementById("requestedTextBox"), productSearchInput: document.getElementById("productSearchInput"), productMatchBox: document.getElementById("productMatchBox"), toast: document.getElementById("toast"),
   saleSearchInput: document.getElementById("saleSearchInput"), saleProductList: document.getElementById("saleProductList"), saleCartList: document.getElementById("saleCartList"), saleTotal: document.getElementById("saleTotal"), salePaymentType: document.getElementById("salePaymentType"), saleCustomerNote: document.getElementById("saleCustomerNote"), completeSaleBtn: document.getElementById("completeSaleBtn"), clearSaleBtn: document.getElementById("clearSaleBtn"), todaySaleTotal: document.getElementById("todaySaleTotal"), todaySaleQty: document.getElementById("todaySaleQty"), todayCashTotal: document.getElementById("todayCashTotal"), todayCardTotal: document.getElementById("todayCardTotal"), topSaleProducts: document.getElementById("topSaleProducts"), currentStaffSelect: document.getElementById("currentStaffSelect"), staffRoleBadge: document.getElementById("staffRoleBadge"), staffEditor: document.getElementById("staffEditor"), staffEditorBody: document.getElementById("staffEditorBody"), printLastSaleBtn: document.getElementById("printLastSaleBtn"), cancelLastSaleBtn: document.getElementById("cancelLastSaleBtn"), productImage: document.getElementById("productImage"), reportStartDate: document.getElementById("reportStartDate"), reportEndDate: document.getElementById("reportEndDate"), reportSearchInput: document.getElementById("reportSearchInput"), criticalSearchInput: document.getElementById("criticalSearchInput"), historySearchInput: document.getElementById("historySearchInput"),
-  operationBrandFilter: document.getElementById("operationBrandFilter"), operationCategoryFilter: document.getElementById("operationCategoryFilter"), operationSearchInput: document.getElementById("operationSearchInput"), operationResultBox: document.getElementById("operationResultBox")
+  operationBrandFilter: document.getElementById("operationBrandFilter"), operationCategoryFilter: document.getElementById("operationCategoryFilter"), operationSearchInput: document.getElementById("operationSearchInput"), operationResultBox: document.getElementById("operationResultBox"),
+  notificationBellBtn: document.getElementById("notificationBellBtn"), notificationUnreadCount: document.getElementById("notificationUnreadCount"), notificationList: document.getElementById("notificationList")
 };
 
 function showToast(message, isError = false) {
@@ -28,6 +30,116 @@ function showToast(message, isError = false) {
   el.toast.style.borderColor = isError ? "rgba(220,38,38,0.5)" : "rgba(22,163,74,0.5)";
   setTimeout(() => el.toast.classList.add("hidden"), 3500);
 }
+function notificationIcon(type) {
+  return ({ stock_request: "📦", critical_stock: "⚠️", movement: "↔️", sale: "💳", system: "🔔" })[type] || "🔔";
+}
+function updateNotificationBadge() {
+  const count = Number(state.unreadNotificationCount || 0);
+  if (!el.notificationUnreadCount) return;
+  if (count > 0) {
+    el.notificationUnreadCount.textContent = count > 99 ? "99+" : String(count);
+    el.notificationUnreadCount.classList.remove("hidden");
+    if (el.notificationBellBtn) el.notificationBellBtn.classList.add("has-unread");
+  } else {
+    el.notificationUnreadCount.classList.add("hidden");
+    if (el.notificationBellBtn) el.notificationBellBtn.classList.remove("has-unread");
+  }
+}
+function renderNotifications() {
+  if (!el.notificationList) return;
+  let list = state.notifications || [];
+  if (state.notificationFilter === "unread") list = list.filter(n => !n.is_read);
+  else if (state.notificationFilter !== "all") list = list.filter(n => n.type === state.notificationFilter);
+  if (!list.length) {
+    el.notificationList.innerHTML = `<div class="empty-state">Bu filtrede bildirim yok</div>`;
+    return;
+  }
+  el.notificationList.innerHTML = list.map(n => `
+    <div class="notification-item ${n.is_read ? "read" : "unread"}">
+      <div class="notification-icon">${notificationIcon(n.type)}</div>
+      <div class="notification-body">
+        <div class="notification-title-row">
+          <strong>${escapeHtml(n.title || "Bildirim")}</strong>
+          <span>${formatDate(n.created_at)}</span>
+        </div>
+        <div class="notification-message">${escapeHtml(n.message || "-")}</div>
+        ${n.source_table || n.source_id ? `<div class="notification-source">${escapeHtml(n.source_table || "")}${n.source_id ? " #" + escapeHtml(String(n.source_id).slice(0, 8)) : ""}</div>` : ""}
+      </div>
+      <div class="notification-actions">
+        ${n.is_read ? "" : `<button class="btn secondary mini" onclick="markNotificationRead('${n.id}')">Okundu</button>`}
+      </div>
+    </div>`).join("");
+}
+function pushLocalNotification({ title, message, type = "system", source_table = null, source_id = null, is_read = false }) {
+  const item = { id: "local_" + Date.now() + "_" + Math.random().toString(16).slice(2), title, message, type, source_table, source_id, is_read, created_at: new Date().toISOString() };
+  state.notifications.unshift(item);
+  state.notifications = state.notifications.slice(0, 120);
+  state.unreadNotificationCount = state.notifications.filter(n => !n.is_read).length;
+  updateNotificationBadge();
+  renderNotifications();
+  return item;
+}
+async function createNotification({ title, message, type = "system", target_role = "depo", source_table = null, source_id = null, silent = false }) {
+  const payload = { title, message, type, target_role, source_table, source_id, is_read: false };
+  if (!state.notificationTableReady) {
+    const item = pushLocalNotification(payload);
+    if (!silent) playNotificationSound();
+    return item;
+  }
+  try {
+    const { data, error } = await supabaseClient.from("notifications").insert(payload).select("*").single();
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.warn("notifications tablosu kullanılamıyor, yerel bildirime düşüldü:", err);
+    state.notificationTableReady = false;
+    const item = pushLocalNotification(payload);
+    if (!silent) playNotificationSound();
+    return item;
+  }
+}
+async function loadNotifications() {
+  if (!state.notificationTableReady) { renderNotifications(); return; }
+  try {
+    const { data, error } = await supabaseClient.from("notifications").select("*").order("created_at", { ascending: false }).limit(120);
+    if (error) throw error;
+    state.notifications = data || [];
+    state.unreadNotificationCount = state.notifications.filter(n => !n.is_read).length;
+    updateNotificationBadge();
+    renderNotifications();
+  } catch (err) {
+    console.warn("Bildirimler yüklenemedi:", err);
+    state.notificationTableReady = false;
+    renderNotifications();
+  }
+}
+window.loadNotifications = loadNotifications;
+window.setNotificationFilter = function(filter) { state.notificationFilter = filter || "all"; renderNotifications(); };
+window.markNotificationRead = async function(id) {
+  const item = state.notifications.find(n => String(n.id) === String(id));
+  if (item) item.is_read = true;
+  state.unreadNotificationCount = state.notifications.filter(n => !n.is_read).length;
+  updateNotificationBadge();
+  renderNotifications();
+  if (!String(id).startsWith("local_") && state.notificationTableReady) {
+    await supabaseClient.from("notifications").update({ is_read: true, read_at: new Date().toISOString() }).eq("id", id);
+  }
+};
+window.markAllNotificationsRead = async function() {
+  state.notifications.forEach(n => n.is_read = true);
+  state.unreadNotificationCount = 0;
+  updateNotificationBadge();
+  renderNotifications();
+  if (state.notificationTableReady) {
+    await supabaseClient.from("notifications").update({ is_read: true, read_at: new Date().toISOString() }).eq("is_read", false);
+  }
+  showToast("Bildirimler okundu yapıldı ✅");
+};
+window.testInAppNotification = function() {
+  pushLocalNotification({ title: "Test bildirimi", message: "Ses ve bildirim merkezi çalışıyor knk ✅", type: "system" });
+  playNotificationSound();
+  showToast("Test bildirimi oluşturuldu ✅");
+};
 function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
 function normalizeText(value) { return String(value || "").toLocaleLowerCase("tr-TR").trim(); }
 function formatDate(value) { if (!value) return "-"; const d = new Date(value); if (Number.isNaN(d.getTime())) return value; return d.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" }); }
@@ -341,6 +453,20 @@ window.operationStockAction = async function(id, type) {
       description: `Hızlı işlem ekranı manuel ${label}`
     });
     if (movementError) throw movementError;
+    if (type === "cikis") {
+      const minStock = Number(product.minStock || 0);
+      const willAvailable = newQty - Number(product.reserved || 0);
+      if (willAvailable <= minStock) {
+        await createNotification({
+          title: "Kritik stok uyarısı",
+          message: `${product.name || product.category || "Ürün"} kritik seviyede. Kullanılabilir: ${willAvailable}, Min: ${minStock}`,
+          type: "critical_stock",
+          target_role: "depo",
+          source_table: "stock_products",
+          source_id: id
+        });
+      }
+    }
     showToast(`${quantity} adet ${label} kaydedildi ✅`);
     await Promise.all([loadProducts(), loadMovements()]);
     renderMovementSearchResults();
@@ -372,7 +498,7 @@ window.quickStockAction = async function(id, type) {
   const quantity = Number(qtyText); if (!quantity || quantity <= 0) return showToast("Geçerli miktar gir", true);
   const available = Number(product.stock || 0) - Number(product.reserved || 0); if (type === "cikis" && available < quantity) return showToast(`Yeterli kullanılabilir stok yok. Kullanılabilir: ${available}`, true);
   if (!confirm(`${product.category || product.name} için ${quantity} adet ${type === "giris" ? "giriş" : "çıkış"} yapılsın mı?`)) return;
-  try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}` }); if (movementError) throw movementError; showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
+  try { setLoading(true); const newQty = type === "giris" ? Number(product.stock) + quantity : Number(product.stock) - quantity; const { error: updateError } = await supabaseClient.from("stock_products").update({ quantity: newQty }).eq("id", id); if (updateError) throw updateError; const { error: movementError } = await supabaseClient.from("stock_movements").insert({ product_id: id, movement_type: type, quantity, description: `Manuel ${type === "giris" ? "stok giriş" : "stok çıkış"}` }); if (movementError) throw movementError; if (type === "cikis") { const minStock = Number(product.minStock || 0); const willAvailable = newQty - Number(product.reserved || 0); if (willAvailable <= minStock) { await createNotification({ title: "Kritik stok uyarısı", message: `${product.name || product.category || "Ürün"} kritik seviyede. Kullanılabilir: ${willAvailable}, Min: ${minStock}`, type: "critical_stock", target_role: "depo", source_table: "stock_products", source_id: id }); } } showToast("Hareket kaydedildi"); await loadAll(); renderMovementSearchResults(); } catch (err) { console.error(err); showToast(err.message || "Hareket kaydedilemedi", true); } finally { setLoading(false); }
 };
 
 function formatSaleMoney(value) {
@@ -1329,7 +1455,7 @@ window.reserveProductForRequest = async function(productId) {
   try { setLoading(true); const { error } = await supabaseClient.rpc("reserve_stock_for_request", { p_request_id: state.selectedStockRequestId, p_product_id: productId, p_quantity: quantity, p_delivered_to: "" }); if (error) throw error; showToast("Stok rezerve edildi ✅ Yeni ürün ekleyebilirsin."); await loadAll(); const stillSelected = state.stockRequests.find(r => String(r.id) === String(state.selectedStockRequestId)); if (stillSelected) { el.reservationPanel.classList.remove("hidden"); renderSelectedRequestDetail(stillSelected); searchProductsForRequest(el.productSearchInput.value); } } catch (err) { console.error(err); showToast(err.message || "Rezerve edilemedi", true); } finally { setLoading(false); }
 };
 window.cancelReservation = async function(requestId) { if (!confirm("Bu rezervi iptal etmek istediğine emin misin?")) return; try { setLoading(true); const { error } = await supabaseClient.rpc("cancel_stock_reservation", { p_request_id: requestId }); if (error) throw error; showToast("Rezerv iptal edildi ✅"); await loadAll(); } catch (err) { console.error(err); showToast(err.message || "Rezerv iptal edilemedi", true); } finally { setLoading(false); } };
-function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "operation", "movements", "sale", "reports", "critical", "history"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") {
+function switchTab(tab) { state.activeTab = tab; ["search", "add", "requests", "operation", "movements", "sale", "reports", "critical", "notifications", "history"].forEach((key) => { document.getElementById("page-" + key).classList.add("hidden"); document.getElementById("nav-" + key).classList.remove("active"); }); document.getElementById("page-" + tab).classList.remove("hidden"); document.getElementById("nav-" + tab).classList.add("active"); if (tab === "requests") {
   state.newRequestCount = 0;
   updateNewRequestAlert();
   loadStockRequests();
@@ -1346,6 +1472,7 @@ if (tab === "sale") {
 }
 if (tab === "reports") renderReports();
 if (tab === "critical") renderCriticalStock();
+if (tab === "notifications") { loadNotifications(); }
 if (tab === "history") renderPlateHistory();
 }
 window.switchTab = switchTab;
@@ -1417,20 +1544,33 @@ function initUpdateChecker() {
 
 function playNotifySound() { try { const AudioContext = window.AudioContext || window.webkitAudioContext; const ctx = new AudioContext(); const osc = ctx.createOscillator(); const gain = ctx.createGain(); osc.type = "sine"; osc.frequency.value = 880; gain.gain.setValueAtTime(0.001, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.03); gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45); osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.5); } catch (e) { console.warn("Ses çalınamadı", e); } }
 async function requestNotificationPermission() { if (!("Notification" in window)) { showToast("Bu tarayıcı bildirim desteklemiyor", true); return; } const result = await Notification.requestPermission(); showToast(result === "granted" ? "Bildirim izni açıldı ✅" : "Bildirim izni verilmedi", result !== "granted"); }
-function notifyNewRequest(req) {
+async function notifyNewRequest(req) {
   state.newRequestCount += 1;
   state.highlightRequestIds.add(req.id);
 
   updateNewRequestAlert();
   playNotificationSound();
 
+  const title = "Yeni depo talebi";
+  const message = `Plaka: ${req.plate || "-"} · İstenen: ${req.requested_text || "-"}`;
+
   if (typeof showToast === "function") {
     showToast("Yeni depo talebi geldi ✅");
   }
 
+  await createNotification({
+    title,
+    message,
+    type: "stock_request",
+    target_role: "depo",
+    source_table: "stock_requests",
+    source_id: req.id,
+    silent: true
+  });
+
   if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("Depo Talebi", {
-      body: `1 yeni sipariş var\nPlaka: ${req.plate || "-"}\nİstenen: ${req.requested_text || "-"}`,
+    new Notification(title, {
+      body: message,
       tag: "stock-request-" + req.id,
       renotify: true
     });
@@ -1454,8 +1594,24 @@ function notifyNewRequest(req) {
         if (!req || state.seenRequestIds.has(req.id)) return;
 
         state.seenRequestIds.add(req.id);
-        notifyNewRequest(req);
+        await notifyNewRequest(req);
         await loadStockRequests();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "notifications" },
+      async (payload) => {
+        const item = payload.new;
+        if (!item) return;
+        if (!state.notifications.some(n => String(n.id) === String(item.id))) {
+          state.notifications.unshift(item);
+          state.notifications = state.notifications.slice(0, 120);
+          state.unreadNotificationCount = state.notifications.filter(n => !n.is_read).length;
+          updateNotificationBadge();
+          renderNotifications();
+          playNotificationSound();
+        }
       }
     )
     .on(
@@ -1639,4 +1795,4 @@ if (el.reportSearchInput) el.reportSearchInput.addEventListener("input", renderR
 if (el.criticalSearchInput) el.criticalSearchInput.addEventListener("input", renderCriticalStock);
 if (el.historySearchInput) el.historySearchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") renderPlateHistory(); });
 if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js").catch(console.error)); }
-renderStaffSelector(); renderSaleFavorites(); loadLastQuickSale(); switchTab("requests"); updateNotifyButtonUI(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
+renderStaffSelector(); renderSaleFavorites(); loadLastQuickSale(); switchTab("requests"); updateNotifyButtonUI(); loadNotifications(); loadAll(); initRealtimeNotifications(); initUpdateChecker();
