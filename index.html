@@ -12,7 +12,28 @@
 </head>
 <body>
   <div class="powered-badge">⚡ Powered By <span>GPT</span> & <b>SchEAx</b></div>
-  <div class="app-shell">
+
+  <div id="loginOverlay" class="login-overlay">
+    <div class="login-card">
+      <div class="login-logo-row">
+        <img src="/logo.png" alt="Logo" onerror="this.style.display='none'" />
+        <div>
+          <h1>Stok Takip</h1>
+          <p class="muted">Personel girişi</p>
+        </div>
+      </div>
+      <label>Personel</label>
+      <select id="loginStaffSelect"></select>
+      <label>Şifre</label>
+      <input id="loginPasswordInput" type="password" placeholder="Şifreni gir" autocomplete="current-password" />
+      <button id="loginBtn" class="btn primary full-btn" type="button">Giriş Yap</button>
+      <div class="login-help">
+        İlk kurulum şifreleri: Admin 0000 · Kasa 1111 · Depo 2222 · Usta 3333
+      </div>
+    </div>
+  </div>
+
+  <div class="app-shell locked" id="appShell">
     <header class="topbar">
       <div class="brand-wrap">
         <img src="/logo.png" alt="Logo" class="app-logo" onerror="this.style.display='none'" />
@@ -22,9 +43,11 @@
         </div>
       </div>
       <div class="top-actions">
+        <div class="user-pill" id="activeUserPill">👤 <strong id="activeUserName">-</strong><span id="activeUserRole">-</span></div>
         <button id="notificationBellBtn" class="btn ghost notification-bell" onclick="switchTab('notifications')">🔔 <span id="notificationUnreadCount" class="notification-count hidden">0</span></button>
         <button id="enableNotifyBtn" class="btn ghost">Bildirim Aç</button>
         <button id="refreshBtn" class="btn secondary">Yenile</button>
+        <button id="logoutBtn" class="btn danger" type="button">Çıkış</button>
       </div>
     </header>
 <div id="newRequestAlert" class="new-request-alert hidden">
@@ -42,6 +65,7 @@
       <button id="nav-critical" onclick="switchTab('critical')">Kritik Stok</button>
       <button id="nav-notifications" onclick="switchTab('notifications')">Bildirimler</button>
       <button id="nav-history" onclick="switchTab('history')">Plaka Geçmişi</button>
+      <button id="nav-users" onclick="switchTab('users')">Kullanıcılar</button>
     </nav>
 
     <section class="stats-grid stats-grid-4">
@@ -375,6 +399,29 @@ LED"></textarea>
       </div>
     </div>
   </div>
+
+
+    <div id="page-users" class="page hidden">
+      <section class="grid-2">
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <h2>Kullanıcı / Yetki Merkezi</h2>
+              <p class="muted">Personeller, roller, son giriş ve işlem kayıtları</p>
+            </div>
+            <button type="button" class="btn secondary" onclick="openStaffEditor()">⚙️ Personel Yönetimi</button>
+          </div>
+          <div id="usersList" class="users-list"><div class="empty-state">Personeller yükleniyor...</div></div>
+        </div>
+        <div class="card">
+          <div class="section-head compact">
+            <h2>Son İşlem Kayıtları</h2>
+            <button type="button" class="btn secondary" onclick="loadActivityLogs()">Yenile</button>
+          </div>
+          <div id="activityLogList" class="movement-list"><div class="empty-state">Kayıt bekleniyor...</div></div>
+        </div>
+      </section>
+    </div>
 
   <div id="staffEditor" class="modal-backdrop hidden">
     <div class="modal-card wide">
